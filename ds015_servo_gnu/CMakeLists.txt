@@ -60,7 +60,7 @@ include_directories(SYSTEM ${submodules}/libcanard/libcanard)
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
-# Build the demo.
+# Build the application.
 aux_source_directory(${CMAKE_SOURCE_DIR}/src sources)
 add_executable(ds015_servo_demo ${sources})
 add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)

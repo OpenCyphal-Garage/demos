@@ -10,7 +10,7 @@
 #include <uavcan/node/port/List_0_1.h>
 #include <uavcan/_register/Access_1_0.h>
 #include <uavcan/_register/List_1_0.h>
-#include <uavcan/pnp/NodeIDAllocationData_1_0.h>
+#include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 
 #include <reg/drone/physics/dynamics/translation/LinearTs_0_1.h>
 #include <reg/drone/physics/electricity/PowerTs_0_1.h>
@@ -26,7 +26,7 @@
 #include <time.h>
 
 #define KILO 1000L
-#define MEGA (KILO * KILO)
+#define MEGA ((int64_t) KILO * KILO)
 
 /// We keep the state of the application here. Feel free to use static variables instead if desired.
 typedef struct State
@@ -155,22 +155,6 @@ static void getUniqueID(uint8_t out[uavcan_node_GetInfo_Response_1_0_unique_id_A
     memcpy(&out[0], &value.unstructured.value, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_);
 }
 
-/// This is like @ref getUniqueID() except that it returns a compact 48-bit hash suitable for plug-and-play node-ID
-/// allocation process as defined in uavcan.pnp.NodeIDAllocation.
-static uint64_t getUniqueIDHash48()
-{
-    uint8_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_] = {0};
-    getUniqueID(uid);
-    // The Spec says that we should compute an arbitrary 48-bit hash from the 128-bit UID.
-    // A proper hash like CRC64 is too much work, so we take a shortcut while staying spec-compliant.
-    return ((uint64_t)(uid[0] + uid[6] + uid[12]) << 0U) |   //
-           ((uint64_t)(uid[1] + uid[7] + uid[13]) << 8U) |   //
-           ((uint64_t)(uid[2] + uid[8] + uid[14]) << 16U) |  //
-           ((uint64_t)(uid[3] + uid[9] + uid[15]) << 24U) |  //
-           ((uint64_t)(uid[4] + uid[10]) << 32U) |           //
-           ((uint64_t)(uid[5] + uid[11]) << 40U);
-}
-
 typedef enum SubjectRole
 {
     SUBJECT_ROLE_PUBLISHER,
@@ -264,16 +248,17 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         // The Specification says that the allocation request publication interval shall be randomized.
         // We implement randomization by calling rand() at fixed intervals and comparing it against some threshold.
         // There are other ways to do it, of course. See the docs in the Specification or in the DSDL definition here:
-        // https://github.com/UAVCAN/public_regulated_data_types/blob/master/uavcan/pnp/8166.NodeIDAllocationData.1.0.uavcan
+        // https://github.com/UAVCAN/public_regulated_data_types/blob/master/uavcan/pnp/8165.NodeIDAllocationData.2.0.uavcan
         // Note that a high-integrity/safety-certified application is unlikely to be able to rely on this feature.
         if (rand() > RAND_MAX / 2)  // NOLINT
         {
-            uavcan_pnp_NodeIDAllocationData_1_0 msg = {0};
-            msg.unique_id_hash                      = getUniqueIDHash48();
-            msg.allocated_node_id.count             = 0;
-            uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+            // Note that this will only work over CAN FD. If you need to run PnP over Classic CAN, use message v1.0.
+            uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
+            msg.node_id.value                       = UINT16_MAX;
+            getUniqueID(msg.unique_id);
+            uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_2_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
             size_t       serialized_size = sizeof(serialized);
-            const int8_t err = uavcan_pnp_NodeIDAllocationData_1_0_serialize_(&msg, &serialized[0], &serialized_size);
+            const int8_t err = uavcan_pnp_NodeIDAllocationData_2_0_serialize_(&msg, &serialized[0], &serialized_size);
             assert(err >= 0);
             if (err >= 0)
             {
@@ -281,7 +266,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                     .timestamp_usec = monotonic_time + MEGA,
                     .priority       = CanardPrioritySlow,
                     .transfer_kind  = CanardTransferKindMessage,
-                    .port_id        = uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_,
+                    .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                     .remote_node_id = CANARD_NODE_ID_UNSET,
                     .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_pnp_allocation++),
                     .payload_size   = serialized_size,
@@ -305,37 +290,54 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
     // The message is a bit heavy on the stack (about 2 KiB) but this is not a problem for a modern MCU.
     if (state->canard.node_id <= CANARD_NODE_ID_MAX)
     {
-        uavcan_node_port_List_0_1 msg = {0};
-        uavcan_node_port_List_0_1_initialize_(&msg);
-        uavcan_node_port_SubjectIDList_0_1_select_sparse_list_(&msg.publishers);
-        uavcan_node_port_SubjectIDList_0_1_select_sparse_list_(&msg.subscribers);
+        uavcan_node_port_List_0_1 m = {0};
+        uavcan_node_port_List_0_1_initialize_(&m);
+        uavcan_node_port_SubjectIDList_0_1_select_sparse_list_(&m.publishers);
+        uavcan_node_port_SubjectIDList_0_1_select_sparse_list_(&m.subscribers);
 
         // Indicate which subjects we publish to. Don't forget to keep this updated if you add new publications!
-        msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value = state->port_id.pub.feedback;
-        msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value = state->port_id.pub.status;
-        msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value = state->port_id.pub.power;
-        msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value = state->port_id.pub.dynamics;
+        {
+            size_t* const cnt                                 = &m.publishers.sparse_list.count;
+            m.publishers.sparse_list.elements[(*cnt)++].value = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_;
+            m.publishers.sparse_list.elements[(*cnt)++].value = uavcan_node_port_List_0_1_FIXED_PORT_ID_;
+            if (state->port_id.pub.feedback <= CANARD_SUBJECT_ID_MAX)
+            {
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.feedback;
+            }
+            if (state->port_id.pub.status <= CANARD_SUBJECT_ID_MAX)
+            {
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.status;
+            }
+            if (state->port_id.pub.power <= CANARD_SUBJECT_ID_MAX)
+            {
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.power;
+            }
+            if (state->port_id.pub.dynamics <= CANARD_SUBJECT_ID_MAX)
+            {
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.dynamics;
+            }
+        }
 
         // Indicate which servers and subscribers we implement.
         // We could construct the list manually but it's easier and more robust to just query libcanard for that.
         const CanardRxSubscription* rxs = state->canard._rx_subscriptions[CanardTransferKindMessage];
         while (rxs != NULL)
         {
-            msg.subscribers.sparse_list.elements[msg.subscribers.sparse_list.count++].value = rxs->_port_id;
-            rxs                                                                             = rxs->_next;
+            m.subscribers.sparse_list.elements[m.subscribers.sparse_list.count++].value = rxs->_port_id;
+            rxs                                                                         = rxs->_next;
         }
         rxs = state->canard._rx_subscriptions[CanardTransferKindRequest];
         while (rxs != NULL)
         {
-            nunavutSetBit(&msg.servers.mask_bitpacked_[0], sizeof(msg.servers.mask_bitpacked_), rxs->_port_id, true);
+            nunavutSetBit(&m.servers.mask_bitpacked_[0], sizeof(m.servers.mask_bitpacked_), rxs->_port_id, true);
             rxs = rxs->_next;
         }
         // Notice that we don't check the clients because our application doesn't invoke any services.
 
         // Serialize and publish the message. Use a small buffer because we know that our message is always small.
-        uint8_t serialized[512] = {0};
-        size_t  serialized_size = sizeof(serialized);
-        if (uavcan_node_port_List_0_1_serialize_(&msg, &serialized[0], &serialized_size) >= 0)
+        uint8_t serialized[512] = {0};  // https://github.com/UAVCAN/nunavut/issues/191
+        size_t  serialized_size = uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_;
+        if (uavcan_node_port_List_0_1_serialize_(&m, &serialized[0], &serialized_size) >= 0)
         {
             const CanardTransfer transfer = {
                 .timestamp_usec = monotonic_time + MEGA,
@@ -353,19 +355,19 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
 }
 
 static void processMessagePlugAndPlayNodeIDAllocation(State* const                                     state,
-                                                      const uavcan_pnp_NodeIDAllocationData_1_0* const msg)
+                                                      const uavcan_pnp_NodeIDAllocationData_2_0* const msg)
 {
-    if ((msg->allocated_node_id.count > 0) &&                                // Response or another request?
-        (msg->allocated_node_id.elements[0].value <= CANARD_NODE_ID_MAX) &&  // Valid node-ID?
-        (msg->unique_id_hash == getUniqueIDHash48()))                        // Same hash?
+    uint8_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_] = {0};
+    getUniqueID(uid);
+    if ((msg->node_id.value <= CANARD_NODE_ID_MAX) && (memcmp(uid, msg->unique_id, sizeof(uid)) == 0))
     {
-        printf("Got PnP node-ID allocation: %d\n", msg->allocated_node_id.elements[0].value);
-        state->canard.node_id = (CanardNodeID) msg->allocated_node_id.elements[0].value;
+        printf("Got PnP node-ID allocation: %d\n", msg->node_id.value);
+        state->canard.node_id = (CanardNodeID) msg->node_id.value;
         // Note that we don't save the dynamic node-ID into the register, it is intentional per the Spec.
         // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
         (void) canardRxUnsubscribe(&state->canard,
                                    CanardTransferKindMessage,
-                                   uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_);
+                                   uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_);
     }
     // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
 }
@@ -400,11 +402,11 @@ static void processReceivedTransfer(State* const                state,
 {
     if (transfer->transfer_kind == CanardTransferKindMessage)
     {
-        if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_)  // PnP node-ID allocation resp.
+        if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)  // PnP node-ID allocation resp.
         {
-            uavcan_pnp_NodeIDAllocationData_1_0 msg  = {0};
+            uavcan_pnp_NodeIDAllocationData_2_0 msg  = {0};
             size_t                              size = transfer->payload_size;
-            if (uavcan_pnp_NodeIDAllocationData_1_0_deserialize_(&msg, transfer->payload, &size) >= 0)
+            if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
@@ -534,11 +536,11 @@ int main()
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.status",
                      reg_drone_service_actuator_common_Status_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.pub.status =  // Electric power input measurements (voltage and current).
+    state.port_id.pub.power =  // Electric power input measurements (voltage and current).
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.power",
                      reg_drone_physics_electricity_PowerTs_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.pub.status =  // Position/speed/acceleration/force feedback.
+    state.port_id.pub.dynamics =  // Position/speed/acceleration/force feedback.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.dynamics",
                      reg_drone_physics_dynamics_translation_LinearTs_0_1_FULL_NAME_AND_VERSION_);
@@ -553,7 +555,95 @@ int main()
                      reg_drone_service_common_Readiness_0_1_FULL_NAME_AND_VERSION_);
 
     // Set up subject subscriptions and RPC-service servers.
-    // TODO
+    // Message subscriptions:
+    if (state.canard.node_id > CANARD_NODE_ID_MAX)
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindMessage,
+                              uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
+                              uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    if (state.port_id.sub.setpoint <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindMessage,
+                              state.port_id.sub.setpoint,
+                              reg_drone_physics_dynamics_translation_Linear_0_1_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    if (state.port_id.sub.readiness <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindMessage,
+                              state.port_id.sub.readiness,
+                              reg_drone_service_common_Readiness_0_1_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    // Service servers:
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindRequest,
+                              uavcan_node_GetInfo_1_0_FIXED_PORT_ID_,
+                              uavcan_node_GetInfo_Request_1_0_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindRequest,
+                              uavcan_register_Access_1_0_FIXED_PORT_ID_,
+                              uavcan_register_Access_Request_1_0_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindRequest,
+                              uavcan_register_List_1_0_FIXED_PORT_ID_,
+                              uavcan_register_List_Request_1_0_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
 
     // Now the node is initialized and we're ready to roll.
     state.started_at                                            = getMonotonicMicroseconds();
