@@ -1,1 +1,46 @@
- 
+# This software is distributed under the terms of the MIT License.
+# Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
+# Author: Pavel Kirienko <pavel@uavcan.org>
+
+cmake_minimum_required(VERSION 3.17)
+project(ds015_servo_demo C CXX)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -pedantic -fstrict-aliasing")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wdouble-promotion -Wswitch-enum -Wfloat-equal -Wundef")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wconversion -Wtype-limits")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wsign-conversion -Wcast-align -Wmissing-declarations")
+
+# Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
+# Alternatively, you can invoke the transpiler manually or use https://nunaweb.uavcan.org.
+find_package(nnvg REQUIRED)
+set(dsdl_root_namespace_dirs                # List all DSDL root namespaces to transpile here.
+        ${submodules}/public_regulated_data_types/uavcan
+        ${submodules}/public_regulated_data_types/reg
+)
+foreach(ns_dir ${dsdl_root_namespace_dirs})
+    get_filename_component(ns ${ns_dir} NAME)
+    message(STATUS "DSDL namespace ${ns} at ${ns_dir}")
+    create_dsdl_target(
+            "dsdl_${ns}"                    # CMake target name
+            c                               # Target language to transpile into
+            ${CMAKE_BINARY_DIR}/transpiled  # Destination directory (add it to the includes)
+            ${ns_dir}                       # Source directory
+            OFF                             # Disable variable array capacity override
+            little                          # Endianness of the target platform (alternatives: "big", "any")
+            ${dsdl_root_namespace_dirs}     # Look-up DSDL namespaces
+    )
+endforeach()
+include_directories(${CMAKE_BINARY_DIR}/transpiled)     # Make the transpiled headers available for inclusion.
+
+# Build libcanard into a static library.
+add_library(canard STATIC ${submodules}/libcanard/libcanard/canard.c)
+include_directories(${submodules}/libcanard/libcanard)
+
+# Build the demo.
+aux_source_directory(${CMAKE_SOURCE_DIR}/src sources)
+add_executable(ds015_servo_demo ${sources})
+add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)
+target_link_libraries(ds015_servo_demo canard)

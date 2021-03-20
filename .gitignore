@@ -37,6 +37,7 @@ cmake-build*/
 
 # DSDL compilation outputs
 .compiled/
+.transpiled/
 
 # IDE and tools
 .gdbinit

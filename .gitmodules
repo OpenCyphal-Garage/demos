@@ -1,9 +1,6 @@
 [submodule "submodules/libcanard"]
 	path = submodules/libcanard
 	url = https://github.com/UAVCAN/libcanard
-[submodule "submodules/platform_specific_components"]
-	path = submodules/platform_specific_components
-	url = https://github.com/UAVCAN/platform_specific_components
 [submodule "submodules/public_regulated_data_types"]
 	path = submodules/public_regulated_data_types
 	url = https://github.com/UAVCAN/public_regulated_data_types
