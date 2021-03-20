@@ -22,7 +22,12 @@ execute_process(
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 message(STATUS "vcs_revision_id: ${vcs_revision_id}")
-add_definitions(-DVCS_REVISION_ID=0x${vcs_revision_id}ULL)
+add_definitions(
+        -DVERSION_MAJOR=1
+        -DVERSION_MINOR=0
+        -DVCS_REVISION_ID=0x${vcs_revision_id}ULL
+        -DNODE_NAME="org.uavcan.demos.ds015.servo"
+)
 
 # Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
 # Alternatively, you can invoke the transpiler manually or use https://nunaweb.uavcan.org.
