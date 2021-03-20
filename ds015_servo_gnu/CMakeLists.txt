@@ -8,10 +8,21 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -pedantic -fstrict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wdouble-promotion -Wswitch-enum -Wfloat-equal -Wundef")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wconversion -Wtype-limits")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wsign-conversion -Wcast-align -Wmissing-declarations")
+
+# Forward the revision information to the compiler so that we could expose it at runtime. This is entirely optional.
+execute_process(
+        COMMAND git rev-parse --short=8 HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE vcs_revision_id
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message(STATUS "vcs_revision_id: ${vcs_revision_id}")
+add_definitions(-DVCS_REVISION_ID=0x${vcs_revision_id}ULL)
 
 # Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
 # Alternatively, you can invoke the transpiler manually or use https://nunaweb.uavcan.org.
@@ -33,14 +44,19 @@ foreach(ns_dir ${dsdl_root_namespace_dirs})
             ${dsdl_root_namespace_dirs}     # Look-up DSDL namespaces
     )
 endforeach()
-include_directories(${CMAKE_BINARY_DIR}/transpiled)     # Make the transpiled headers available for inclusion.
+include_directories(SYSTEM ${CMAKE_BINARY_DIR}/transpiled)  # Make the transpiled headers available for inclusion.
+add_definitions(-DNUNAVUT_ASSERT=assert)
 
-# Build libcanard into a static library.
+# Build libcanard.
 add_library(canard STATIC ${submodules}/libcanard/libcanard/canard.c)
-include_directories(${submodules}/libcanard/libcanard)
+include_directories(SYSTEM ${submodules}/libcanard/libcanard)
+
+# Build o1heap -- a hard real-time deterministic memory allocator for embedded systems.
+add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
+include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
 # Build the demo.
 aux_source_directory(${CMAKE_SOURCE_DIR}/src sources)
 add_executable(ds015_servo_demo ${sources})
 add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)
-target_link_libraries(ds015_servo_demo canard)
+target_link_libraries(ds015_servo_demo canard o1heap)

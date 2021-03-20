@@ -4,3 +4,6 @@
 [submodule "submodules/public_regulated_data_types"]
 	path = submodules/public_regulated_data_types
 	url = https://github.com/UAVCAN/public_regulated_data_types
+[submodule "submodules/o1heap"]
+	path = submodules/o1heap
+	url = https://github.com/pavel-kirienko/o1heap
