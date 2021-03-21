@@ -23,7 +23,11 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <time.h>
+#include <unistd.h>
 
 #define KILO 1000L
 #define MEGA ((int64_t) KILO * KILO)
@@ -136,6 +140,21 @@ static bool registerAssignValue(uavcan_register_Value_1_0* const dst, const uavc
     return false;
 }
 
+static const char RegistryDirName[] = "registry";
+
+/// An internal helper for opening register files.
+/// An actual implementation on an embedded system may need to perform atomic file transactions via rename().
+static FILE* registerOpen(const char* const register_name, const bool write)
+{
+    char file_path[300] = {0};
+    (void) snprintf(&file_path[0], sizeof(file_path), "%s/%s", RegistryDirName, register_name);
+    if (write)
+    {
+        (void) mkdir(RegistryDirName, S_IRWXU | S_IRWXG | S_IRWXO);
+    }
+    return fopen(&file_path[0], write ? "wb" : "rb");
+}
+
 /// Store the given register value into the persistent storage.
 /// In this demo, we use the filesystem for persistence. A real embedded application would typically use some
 /// non-volatile memory for the same purpose (e.g., direct writes into the on-chip EEPROM);
@@ -147,7 +166,7 @@ static void registerWrite(const char* const register_name, const uavcan_register
     const int8_t err = uavcan_register_Value_1_0_serialize_(value, serialized, &sr_size);
     if (err >= 0)
     {
-        FILE* const fp = fopen(&register_name[0], "wb");
+        FILE* const fp = registerOpen(&register_name[0], true);
         if (fp != NULL)
         {
             (void) fwrite(&serialized[0], 1U, sr_size, fp);
@@ -163,12 +182,12 @@ static void registerWrite(const char* const register_name, const uavcan_register
 static void registerRead(const char* const register_name, uavcan_register_Value_1_0* const inout_default)
 {
     assert(inout_default != NULL);
-    FILE* fp = fopen(&register_name[0], "rb");
+    FILE* fp = registerOpen(&register_name[0], false);
     if ((fp == NULL) && !uavcan_register_Value_1_0_is_empty_(inout_default))
     {
         printf("Init register: %s\n", register_name);
         registerWrite(register_name, inout_default);
-        fp = fopen(&register_name[0], "rb");
+        fp = registerOpen(&register_name[0], false);
     }
     if (fp != NULL)
     {
@@ -463,11 +482,37 @@ static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const ua
     return resp;
 }
 
-static uavcan_register_List_Response_1_0 processRequestRegisterList(const uavcan_register_List_Request_1_0* req)
+static uavcan_register_List_Response_1_0 processRequestRegisterList(const uavcan_register_List_Request_1_0* const req)
 {
-    (void) req;
     uavcan_register_List_Response_1_0 resp = {0};
-    // TODO
+    DIR* const                        dp   = opendir(RegistryDirName);
+    if (dp != NULL)
+    {
+        // The service definition requires that the ordering is consistent between calls.
+        // We assume here that there will be no new registers added while the listing operation is in progress.
+        // If this is not the case, you will need to implement additional logic to uphold the ordering consistency
+        // guarantee, such as sorting registers by creation time or adding extra metadata.
+        struct dirent* ep = readdir(dp);
+        uint16_t       ii = 0;
+        while (ep != NULL)
+        {
+            if (ep->d_type == DT_REG)
+            {
+                if (ii >= req->index)
+                {
+                    break;
+                }
+                ++ii;
+            }
+            ep = readdir(dp);
+        }
+        if (ep != NULL)
+        {
+            resp.name.name.count = nunavutChooseMin(strlen(ep->d_name), uavcan_register_Name_1_0_name_ARRAY_CAPACITY_);
+            memcpy(resp.name.name.elements, ep->d_name, resp.name.name.count);
+        }
+        (void) closedir(dp);
+    }
     return resp;
 }
 
@@ -824,7 +869,6 @@ int main()
                         return -result;  // SocketCAN interface failure (link down?)
                     }
                 }
-                // We end up here if the frame is sent to SocketCAN successfully or if it has timed out in the TX queue.
                 canardTxPop(&state.canard);
                 state.canard.memory_free(&state.canard, (void*) frame);
                 frame = canardTxPeek(&state.canard);
