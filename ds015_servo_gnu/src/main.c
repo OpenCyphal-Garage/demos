@@ -83,6 +83,59 @@ static CanardMicrosecond getMonotonicMicroseconds()
     return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
 }
 
+/// Copy one value to the other if their types and dimensionality are the same or automatic conversion is possible.
+/// If the destination is empty, it is simply replaced with the source (assignment always succeeds).
+/// The return value is true if the assignment has been performed, false if it is not possible.
+/// This function looks gnarly because C has no support for metaprogramming.
+static bool registerAssignValue(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src)
+{
+    if (uavcan_register_Value_1_0_is_empty_(dst))
+    {
+        *dst = *src;
+        return true;
+    }
+    if ((uavcan_register_Value_1_0_is_string_(dst) && uavcan_register_Value_1_0_is_string_(src)) ||
+        (uavcan_register_Value_1_0_is_unstructured_(dst) && uavcan_register_Value_1_0_is_unstructured_(src)))
+    {
+        *dst = *src;
+        return true;
+    }
+    if (uavcan_register_Value_1_0_is_bit_(dst) && uavcan_register_Value_1_0_is_bit_(src))
+    {
+        nunavutCopyBits(dst->bit.value.bitpacked,
+                        0,
+                        nunavutChooseMin(dst->bit.value.count, src->bit.value.count),
+                        src->bit.value.bitpacked,
+                        0);
+        return true;
+    }
+    // This is a violation of MISRA/AUTOSAR but it is believed to be less error-prone than manually copy-pasted code.
+#define REGISTER_CASE_PASTE3_IMPL(x, y, z) x##y##z
+#define REGISTER_CASE_PASTE3(x, y, z) REGISTER_CASE_PASTE3_IMPL(x, y, z)
+#define REGISTER_CASE_SAME_TYPE(TYPE)                                                               \
+    if (REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(dst) &&                        \
+        REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(src))                          \
+    {                                                                                               \
+        for (size_t i = 0; i < nunavutChooseMin(dst->TYPE.value.count, src->TYPE.value.count); ++i) \
+        {                                                                                           \
+            dst->TYPE.value.elements[i] = src->TYPE.value.elements[i];                              \
+        }                                                                                           \
+        return true;                                                                                \
+    }
+    REGISTER_CASE_SAME_TYPE(integer64)
+    REGISTER_CASE_SAME_TYPE(integer32)
+    REGISTER_CASE_SAME_TYPE(integer16)
+    REGISTER_CASE_SAME_TYPE(integer8)
+    REGISTER_CASE_SAME_TYPE(natural64)
+    REGISTER_CASE_SAME_TYPE(natural32)
+    REGISTER_CASE_SAME_TYPE(natural16)
+    REGISTER_CASE_SAME_TYPE(natural8)
+    REGISTER_CASE_SAME_TYPE(real64)
+    REGISTER_CASE_SAME_TYPE(real32)
+    REGISTER_CASE_SAME_TYPE(real16)
+    return false;
+}
+
 /// Store the given register value into the persistent storage.
 /// In this demo, we use the filesystem for persistence. A real embedded application would typically use some
 /// non-volatile memory for the same purpose (e.g., direct writes into the on-chip EEPROM);
@@ -104,14 +157,14 @@ static void registerWrite(const char* const register_name, const uavcan_register
 }
 
 /// Reads the specified register from the persistent storage into `inout_value`. If the register does not exist,
-/// the default will not be modified but stored into the persistent storage using @ref registerWrite().
+/// and the default is not empty, the default will be stored into the persistent storage using @ref registerWrite().
 /// If the value exists in the persistent storage but it is of a different type, it is treated as non-existent,
 /// unless the provided value is empty.
 static void registerRead(const char* const register_name, uavcan_register_Value_1_0* const inout_default)
 {
     assert(inout_default != NULL);
     FILE* fp = fopen(&register_name[0], "rb");
-    if (fp == NULL)
+    if ((fp == NULL) && !uavcan_register_Value_1_0_is_empty_(inout_default))
     {
         printf("Init register: %s\n", register_name);
         registerWrite(register_name, inout_default);
@@ -372,6 +425,52 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
     // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
 }
 
+static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const uavcan_register_Access_Request_1_0* req)
+{
+    char name[uavcan_register_Name_1_0_name_ARRAY_CAPACITY_ + 1] = {0};
+    assert(req->name.name.count < sizeof(name));
+    memcpy(&name[0], req->name.name.elements, req->name.name.count);
+    name[req->name.name.count] = '\0';
+
+    uavcan_register_Access_Response_1_0 resp = {0};
+
+    // If we're asked to write a new value, do it now:
+    if (!uavcan_register_Value_1_0_is_empty_(&req->value))
+    {
+        uavcan_register_Value_1_0_select_empty_(&resp.value);
+        registerRead(&name[0], &resp.value);
+        // If such register exists and it can be assigned from the request value:
+        if (!uavcan_register_Value_1_0_is_empty_(&resp.value) && registerAssignValue(&resp.value, &req->value))
+        {
+            registerWrite(&name[0], &resp.value);
+        }
+    }
+
+    // Regardless of whether we've just wrote a value or not, we need to read the current one and return it.
+    // The client will determine if the write was successful or not by comparing the request value with response.
+    uavcan_register_Value_1_0_select_empty_(&resp.value);
+    registerRead(&name[0], &resp.value);
+
+    // Currently, all registers we implement are mutable and persistent. This is an acceptable simplification,
+    // but more advanced implementations will need to differentiate between them to support advanced features like
+    // exposing internal states via registers, perfcounters, etc.
+    resp._mutable   = true;
+    resp.persistent = true;
+
+    // Our node does not synchronize its time with the network so we can't populate the timestamp.
+    resp.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
+
+    return resp;
+}
+
+static uavcan_register_List_Response_1_0 processRequestRegisterList(const uavcan_register_List_Request_1_0* req)
+{
+    (void) req;
+    uavcan_register_List_Response_1_0 resp = {0};
+    // TODO
+    return resp;
+}
+
 /// Constructs a response to uavcan.node.GetInfo which contains the basic information about this node.
 static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
 {
@@ -411,6 +510,7 @@ static void processReceivedTransfer(State* const                state,
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
         }
+        // TODO: handle servo messages.
         else
         {
             assert(false);  // Seems like we have set up a port subscription without a handler -- bad implementation.
@@ -428,12 +528,12 @@ static void processReceivedTransfer(State* const                state,
             const int8_t res = uavcan_node_GetInfo_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size);
             if (res >= 0)
             {
-                CanardTransfer response_transfer = *transfer;  // Response transfer is very similar to its request.
-                response_transfer.timestamp_usec = now + MEGA;
-                response_transfer.transfer_kind  = CanardTransferKindResponse;
-                response_transfer.payload_size   = serialized_size;
-                response_transfer.payload        = &serialized[0];
-                (void) canardTxPush(&state->canard, &response_transfer);
+                CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
+                rt.timestamp_usec = now + MEGA;
+                rt.transfer_kind  = CanardTransferKindResponse;
+                rt.payload_size   = serialized_size;
+                rt.payload        = &serialized[0];
+                (void) canardTxPush(&state->canard, &rt);
             }
             else
             {
@@ -442,11 +542,43 @@ static void processReceivedTransfer(State* const                state,
         }
         else if (transfer->port_id == uavcan_register_Access_1_0_FIXED_PORT_ID_)
         {
-            // TODO
+            uavcan_register_Access_Request_1_0 req  = {0};
+            size_t                             size = transfer->payload_size;
+            if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            {
+                const uavcan_register_Access_Response_1_0 resp = processRequestRegisterAccess(&req);
+                uint8_t serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                size_t  serialized_size = sizeof(serialized);
+                if (uavcan_register_Access_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
+                {
+                    CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
+                    rt.timestamp_usec = now + MEGA;
+                    rt.transfer_kind  = CanardTransferKindResponse;
+                    rt.payload_size   = serialized_size;
+                    rt.payload        = &serialized[0];
+                    (void) canardTxPush(&state->canard, &rt);
+                }
+            }
         }
         else if (transfer->port_id == uavcan_register_List_1_0_FIXED_PORT_ID_)
         {
-            // TODO
+            uavcan_register_List_Request_1_0 req  = {0};
+            size_t                           size = transfer->payload_size;
+            if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            {
+                const uavcan_register_List_Response_1_0 resp = processRequestRegisterList(&req);
+                uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                size_t  serialized_size = sizeof(serialized);
+                if (uavcan_register_List_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
+                {
+                    CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
+                    rt.timestamp_usec = now + MEGA;
+                    rt.transfer_kind  = CanardTransferKindResponse;
+                    rt.payload_size   = serialized_size;
+                    rt.payload        = &serialized[0];
+                    (void) canardTxPush(&state->canard, &rt);
+                }
+            }
         }
         else
         {
