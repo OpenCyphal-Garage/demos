@@ -1,6 +1,18 @@
-// This software is distributed under the terms of the MIT License.
-// Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
-// Author: Pavel Kirienko <pavel@uavcan.org>
+///                         __   __   _______   __   __   _______   _______   __   __
+///                        |  | |  | /   _   ` |  | |  | /   ____| /   _   ` |  ` |  |
+///                        |  | |  | |  |_|  | |  | |  | |  |      |  |_|  | |   `|  |
+///                        |  |_|  | |   _   | `  `_/  / |  |____  |   _   | |  |`   |
+///                        `_______/ |__| |__|  `_____/  `_______| |__| |__| |__| `__|
+///                            |      |            |         |      |         |
+///                        ----o------o------------o---------o------o---------o-------
+///
+/// A demo application showcasing the implementation of a Dronecode UAVCAN Drone Standard DS-015 servo network service.
+/// This application is intended to run on any POSIX system but it is trivially adaptable to baremetal environments.
+/// Please refer to the enclosed README for details.
+///
+/// This software is distributed under the terms of the MIT License.
+/// Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
+/// Author: Pavel Kirienko <pavel@uavcan.org>
 
 #include "socketcan.h"
 #include <o1heap.h>
@@ -22,12 +34,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <sys/time.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
 #include <time.h>
-#include <unistd.h>
 
 #define KILO 1000L
 #define MEGA ((int64_t) KILO * KILO)
@@ -89,7 +98,8 @@ static CanardMicrosecond getMonotonicMicroseconds()
 
 /// Copy one value to the other if their types and dimensionality are the same or automatic conversion is possible.
 /// If the destination is empty, it is simply replaced with the source (assignment always succeeds).
-/// The return value is true if the assignment has been performed, false if it is not possible.
+/// The return value is true if the assignment has been performed, false if it is not possible
+/// (in the latter case the destination is NOT modified).
 /// This function looks gnarly because C has no support for metaprogramming.
 static bool registerAssignValue(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src)
 {
@@ -175,20 +185,15 @@ static void registerWrite(const char* const register_name, const uavcan_register
     }
 }
 
-/// Reads the specified register from the persistent storage into `inout_value`. If the register does not exist,
-/// and the default is not empty, the default will be stored into the persistent storage using @ref registerWrite().
-/// If the value exists in the persistent storage but it is of a different type, it is treated as non-existent,
-/// unless the provided value is empty.
+/// Reads the specified register from the persistent storage into `inout_value`.
+/// If the register does not exist or it cannot be automatically converted to the type of the provided argument,
+/// the default will be stored into the persistent storage using @ref registerWrite().
+/// The default will not be stored if the argument is empty.
 static void registerRead(const char* const register_name, uavcan_register_Value_1_0* const inout_default)
 {
     assert(inout_default != NULL);
-    FILE* fp = registerOpen(&register_name[0], false);
-    if ((fp == NULL) && !uavcan_register_Value_1_0_is_empty_(inout_default))
-    {
-        printf("Init register: %s\n", register_name);
-        registerWrite(register_name, inout_default);
-        fp = registerOpen(&register_name[0], false);
-    }
+    bool init_required = !uavcan_register_Value_1_0_is_empty_(inout_default);
+    FILE* const fp = registerOpen(&register_name[0], false);
     if (fp != NULL)
     {
         uint8_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
@@ -198,13 +203,13 @@ static void registerRead(const char* const register_name, uavcan_register_Value_
         const int8_t              err = uavcan_register_Value_1_0_deserialize_(&out, serialized, &sr_size);
         if (err >= 0)
         {
-            const bool same_type = (inout_default->_tag_ == out._tag_) ||  //
-                                   uavcan_register_Value_1_0_is_empty_(inout_default);
-            if (same_type)  // Otherwise, consider non-existent. The correct type will be enforced at next write.
-            {
-                *inout_default = out;
-            }
+            init_required = !registerAssignValue(inout_default, &out);
         }
+    }
+    if (init_required)
+    {
+        printf("Init register: %s\n", register_name);
+        registerWrite(register_name, inout_default);
     }
 }
 
