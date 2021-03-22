@@ -12,6 +12,7 @@
       <w>aton</w>
       <w>autoconfiguration</w>
       <w>autodoc</w>
+      <w>baremetal</w>
       <w>baudrate</w>
       <w>bgcolor</w>
       <w>blin</w>
@@ -204,6 +205,7 @@
       <w>sert</w>
       <w>serv</w>
       <w>setcap</w>
+      <w>setpoint</w>
       <w>setsockopt</w>
       <w>sheremet</w>
       <w>signedness</w>

@@ -13,6 +13,8 @@ In order to make sense of the materials presented here,
 **you should first read [the UAVCAN Guide](https://uavcan.org/guide)**
 as well as the brief architecture overview provided for the
 [DS-015 UAVCAN Drone Standard](https://github.com/UAVCAN/public_regulated_data_types/tree/master/reg/drone).
+For a more hands-on experience, consider completing the
+[PyUAVCAN tutorial](https://pyuavcan.readthedocs.io/en/stable/pages/demo.html).
 
 UAVCAN heavily delegates responsibility to individual participants of the
 distributed computing system instead of aggregating it in a central agent responsible for everything.
