@@ -11,6 +11,9 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#define PASTE3_IMPL(x, y, z) x##y##z
+#define PASTE3(x, y, z) PASTE3_IMPL(x, y, z)
+
 static const char RegistryDirName[] = "registry";
 
 static inline FILE* registerOpen(const char* const register_name, const bool write)
@@ -123,17 +126,14 @@ bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_
         return true;
     }
     // This is a violation of MISRA/AUTOSAR but it is believed to be less error-prone than manually copy-pasted code.
-#define REGISTER_CASE_PASTE3_IMPL(x, y, z) x##y##z
-#define REGISTER_CASE_PASTE3(x, y, z) REGISTER_CASE_PASTE3_IMPL(x, y, z)
-#define REGISTER_CASE_SAME_TYPE(TYPE)                                                               \
-    if (REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(dst) &&                        \
-        REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(src))                          \
-    {                                                                                               \
-        for (size_t i = 0; i < nunavutChooseMin(dst->TYPE.value.count, src->TYPE.value.count); ++i) \
-        {                                                                                           \
-            dst->TYPE.value.elements[i] = src->TYPE.value.elements[i];                              \
-        }                                                                                           \
-        return true;                                                                                \
+#define REGISTER_CASE_SAME_TYPE(TYPE)                                                                               \
+    if (PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(dst) && PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(src)) \
+    {                                                                                                               \
+        for (size_t i = 0; i < nunavutChooseMin(dst->TYPE.value.count, src->TYPE.value.count); ++i)                 \
+        {                                                                                                           \
+            dst->TYPE.value.elements[i] = src->TYPE.value.elements[i];                                              \
+        }                                                                                                           \
+        return true;                                                                                                \
     }
     REGISTER_CASE_SAME_TYPE(integer64)
     REGISTER_CASE_SAME_TYPE(integer32)

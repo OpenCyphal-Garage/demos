@@ -204,8 +204,8 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     const bool     anonymous         = state->canard.node_id > CANARD_NODE_ID_MAX;
     const uint64_t servo_transfer_id = state->next_transfer_id.servo_fast_loop++;
 
-    // Publish feedback.
-    if (!anonymous)
+    // Publish feedback if the subject is enabled and the node is non-anonymous.
+    if (!anonymous && (state->port_id.pub.servo_feedback <= CANARD_SUBJECT_ID_MAX))
     {
         reg_drone_service_actuator_common_Feedback_0_1 msg = {0};
         msg.heartbeat.readiness.value = state->servo.arming.armed ? reg_drone_service_common_Readiness_0_1_ENGAGED
@@ -234,8 +234,8 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         }
     }
 
-    // Publish dynamics.
-    if (!anonymous)
+    // Publish dynamics if the subject is enabled and the node is non-anonymous.
+    if (!anonymous && (state->port_id.pub.servo_dynamics <= CANARD_SUBJECT_ID_MAX))
     {
         reg_drone_physics_dynamics_translation_LinearTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
@@ -268,8 +268,8 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         }
     }
 
-    // Publish power.
-    if (!anonymous)
+    // Publish power if the subject is enabled and the node is non-anonymous.
+    if (!anonymous && (state->port_id.pub.servo_power <= CANARD_SUBJECT_ID_MAX))
     {
         reg_drone_physics_electricity_PowerTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
