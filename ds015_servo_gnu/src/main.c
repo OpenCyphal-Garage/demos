@@ -578,9 +578,7 @@ static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
     return resp;
 }
 
-static void processReceivedTransfer(State* const                state,
-                                    const CanardTransfer* const transfer,
-                                    const CanardMicrosecond     monotonic_time)
+static void processReceivedTransfer(State* const state, const CanardTransfer* const transfer)
 {
     if (transfer->transfer_kind == CanardTransferKindMessage)
     {
@@ -598,7 +596,7 @@ static void processReceivedTransfer(State* const                state,
             reg_drone_service_common_Readiness_0_1 msg = {0};
             if (reg_drone_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
-                processMessageServiceReadiness(state, &msg, monotonic_time);
+                processMessageServiceReadiness(state, &msg, transfer->timestamp_usec);
             }
         }
         else if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
@@ -626,7 +624,7 @@ static void processReceivedTransfer(State* const                state,
             if (res >= 0)
             {
                 CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                rt.timestamp_usec = monotonic_time + MEGA;
+                rt.timestamp_usec = transfer->timestamp_usec + MEGA;
                 rt.transfer_kind  = CanardTransferKindResponse;
                 rt.payload_size   = serialized_size;
                 rt.payload        = &serialized[0];
@@ -649,7 +647,7 @@ static void processReceivedTransfer(State* const                state,
                 if (uavcan_register_Access_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
                     CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                    rt.timestamp_usec = monotonic_time + MEGA;
+                    rt.timestamp_usec = transfer->timestamp_usec + MEGA;
                     rt.transfer_kind  = CanardTransferKindResponse;
                     rt.payload_size   = serialized_size;
                     rt.payload        = &serialized[0];
@@ -669,7 +667,7 @@ static void processReceivedTransfer(State* const                state,
                 if (uavcan_register_List_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
                     CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                    rt.timestamp_usec = monotonic_time + MEGA;
+                    rt.timestamp_usec = transfer->timestamp_usec + MEGA;
                     rt.transfer_kind  = CanardTransferKindResponse;
                     rt.payload_size   = serialized_size;
                     rt.payload        = &serialized[0];
@@ -951,12 +949,15 @@ int main()
                 {
                     return -socketcan_result;
                 }
+                // The SocketCAN adapter uses the wall clock for timestamping, but we need monotonic; override here.
+                // Wall clock can only be used for time synchronization.
+                frame.timestamp_usec = getMonotonicMicroseconds();
 
                 CanardTransfer transfer      = {0};
                 const int8_t   canard_result = canardRxAccept(&state.canard, &frame, 0, &transfer);
                 if (canard_result > 0)
                 {
-                    processReceivedTransfer(&state, &transfer, monotonic_time);
+                    processReceivedTransfer(&state, &transfer);
                     state.canard.memory_free(&state.canard, (void*) transfer.payload);
                 }
                 else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
