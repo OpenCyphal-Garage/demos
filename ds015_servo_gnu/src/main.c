@@ -25,11 +25,12 @@
 #include <uavcan/_register/List_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 
-#include <reg/drone/physics/dynamics/translation/LinearTs_0_1.h>
-#include <reg/drone/physics/electricity/PowerTs_0_1.h>
+#include <reg/drone/service/common/Readiness_0_1.h>
+#include <reg/drone/service/actuator/common/__0_1.h>
 #include <reg/drone/service/actuator/common/Feedback_0_1.h>
 #include <reg/drone/service/actuator/common/Status_0_1.h>
-#include <reg/drone/service/common/Readiness_0_1.h>
+#include <reg/drone/physics/dynamics/translation/LinearTs_0_1.h>
+#include <reg/drone/physics/electricity/PowerTs_0_1.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,7 +52,11 @@ typedef struct State
     struct
     {
         /// Whether the servo is supposed to actuate the load or to stay idle (safe low-power mode).
-        bool armed;
+        struct
+        {
+            bool              armed;
+            CanardMicrosecond last_update_at;
+        } arming;
 
         /// Setpoint & motion profile (unsupported constraints are to be ignored).
         /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
@@ -180,7 +185,35 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
 {
     (void) state;
     (void) monotonic_time;
-    // TODO
+    // Apply control inputs if armed.
+    if (state->servo.arming.armed)
+    {
+        fprintf(stderr,
+                "\rp=%.3f m    v=%.3f m/s    a=%.3f (m/s)^2    F=%.3f N    \r",
+                (double) state->servo.position,
+                (double) state->servo.velocity,
+                (double) state->servo.acceleration,
+                (double) state->servo.force);
+    }
+    else
+    {
+        fprintf(stderr, "\rDISARMED\r");
+    }
+
+    // Publish feedback.
+    {
+        ;
+    }
+
+    // Publish dynamics.
+    {
+        ;
+    }
+
+    // Publish power.
+    {
+        ;
+    }
 }
 
 /// Invoked every second.
@@ -258,7 +291,36 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
 
     if (!anonymous)
     {
-        // TODO: publish servo status.
+        // Publish the servo status -- this is a low-rate message with low-severity diagnostics.
+        reg_drone_service_actuator_common_Status_0_1 msg = {0};
+        // TODO: POPULATE THE MESSAGE: temperature, errors, etc.
+        uint8_t      serialized[reg_drone_service_actuator_common_Status_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        size_t       serialized_size = sizeof(serialized);
+        const int8_t err =
+            reg_drone_service_actuator_common_Status_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+        assert(err >= 0);
+        if (err >= 0)
+        {
+            const CanardTransfer transfer = {
+                .timestamp_usec = monotonic_time + MEGA,
+                .priority       = CanardPriorityNominal,
+                .transfer_kind  = CanardTransferKindMessage,
+                .port_id        = state->port_id.pub.status,
+                .remote_node_id = CANARD_NODE_ID_UNSET,
+                .transfer_id    = (CanardTransferID)(state->next_transfer_id.servo_status++),
+                .payload_size   = serialized_size,
+                .payload        = &serialized[0],
+            };
+            (void) canardTxPush(&state->canard, &transfer);
+        }
+    }
+
+    // Disarm automatically if the arming subject has not been updated in a while.
+    if (state->servo.arming.armed && ((monotonic_time - state->servo.arming.last_update_at) >
+                                      (uint64_t)(reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
+    {
+        state->servo.arming.armed = false;
+        puts("Disarmed by timeout");
     }
 }
 
@@ -344,9 +406,12 @@ static void processMessageServoSetpoint(State* const                            
 }
 
 /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/common/Readiness.0.1.uavcan
-static void processMessageServiceReadiness(State* const state, const reg_drone_service_common_Readiness_0_1* const msg)
+static void processMessageServiceReadiness(State* const                                        state,
+                                           const reg_drone_service_common_Readiness_0_1* const msg,
+                                           const CanardMicrosecond                             monotonic_time)
 {
-    state->servo.armed = msg->value >= reg_drone_service_common_Readiness_0_1_ENGAGED;
+    state->servo.arming.armed          = msg->value >= reg_drone_service_common_Readiness_0_1_ENGAGED;
+    state->servo.arming.last_update_at = monotonic_time;
 }
 
 static void processMessagePlugAndPlayNodeIDAllocation(State* const                                     state,
@@ -367,6 +432,12 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
     // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
 }
 
+/// Performance notice: the register storage may be slow to access depending on its implementation (e.g., if it is
+/// backed by an uncached filesystem). If your register storage implementation is slow, this may disrupt real-time
+/// activities of the device. To avoid this, you can employ these measures:
+/// - Run a separate UAVCAN processing task for soft-real-time blocking operations (this approach is used in PX4).
+/// - Cache register states in RAM and synchronize them with the storage asynchronously.
+/// - Document an operational limitation that the register interface should not be accessed while ENGAGED (armed).
 static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const uavcan_register_Access_Request_1_0* req)
 {
     char name[uavcan_register_Name_1_0_name_ARRAY_CAPACITY_ + 1] = {0};
@@ -431,7 +502,7 @@ static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
 
 static void processReceivedTransfer(State* const                state,
                                     const CanardTransfer* const transfer,
-                                    const CanardMicrosecond     now)
+                                    const CanardMicrosecond     monotonic_time)
 {
     if (transfer->transfer_kind == CanardTransferKindMessage)
     {
@@ -449,7 +520,7 @@ static void processReceivedTransfer(State* const                state,
             reg_drone_service_common_Readiness_0_1 msg = {0};
             if (reg_drone_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
-                processMessageServiceReadiness(state, &msg);
+                processMessageServiceReadiness(state, &msg, monotonic_time);
             }
         }
         else if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
@@ -477,7 +548,7 @@ static void processReceivedTransfer(State* const                state,
             if (res >= 0)
             {
                 CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                rt.timestamp_usec = now + MEGA;
+                rt.timestamp_usec = monotonic_time + MEGA;
                 rt.transfer_kind  = CanardTransferKindResponse;
                 rt.payload_size   = serialized_size;
                 rt.payload        = &serialized[0];
@@ -500,7 +571,7 @@ static void processReceivedTransfer(State* const                state,
                 if (uavcan_register_Access_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
                     CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                    rt.timestamp_usec = now + MEGA;
+                    rt.timestamp_usec = monotonic_time + MEGA;
                     rt.transfer_kind  = CanardTransferKindResponse;
                     rt.payload_size   = serialized_size;
                     rt.payload        = &serialized[0];
@@ -520,7 +591,7 @@ static void processReceivedTransfer(State* const                state,
                 if (uavcan_register_List_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
                     CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
-                    rt.timestamp_usec = now + MEGA;
+                    rt.timestamp_usec = monotonic_time + MEGA;
                     rt.transfer_kind  = CanardTransferKindResponse;
                     rt.payload_size   = serialized_size;
                     rt.payload        = &serialized[0];
@@ -740,31 +811,34 @@ int main()
     while (true)
     {
         // Run a trivial scheduler polling the loops that run the business logic.
-        CanardMicrosecond now = getMonotonicMicroseconds();
-        if (now >= next_fast_iter_at)  // The fastest loop is the most jitter-sensitive so it is to be handled first.
+        CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
+        if (monotonic_time >=
+            next_fast_iter_at)  // The fastest loop is the most jitter-sensitive so it is to be handled first.
         {
             next_fast_iter_at += fast_loop_period;
-            handleFastLoop(&state, now);
+            handleFastLoop(&state, monotonic_time);
         }
-        if (now >= next_1_hz_iter_at)
+        if (monotonic_time >= next_1_hz_iter_at)
         {
             next_1_hz_iter_at += MEGA;
-            handle1HzLoop(&state, now);
+            handle1HzLoop(&state, monotonic_time);
         }
-        if (now >= next_01_hz_iter_at)  // The slowest loop is the least jitter-sensitive so it is to be handled last.
+        if (monotonic_time >=
+            next_01_hz_iter_at)  // The slowest loop is the least jitter-sensitive so it is to be handled last.
         {
             next_01_hz_iter_at += MEGA * 10;
-            handle01HzLoop(&state, now);
+            handle01HzLoop(&state, monotonic_time);
         }
 
         // Transmit pending frames from the prioritized TX queue managed by libcanard.
+        // You can service an arbitrary number of redundant interfaces here!
         {
             const CanardFrame* frame = canardTxPeek(&state.canard);  // Take the highest-priority frame from TX queue.
             while (frame != NULL)
             {
                 // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
                 // Otherwise just drop it and move on to the next one.
-                if ((frame->timestamp_usec == 0) || (frame->timestamp_usec > now))
+                if ((frame->timestamp_usec == 0) || (frame->timestamp_usec > monotonic_time))
                 {
                     const int16_t result = socketcanPush(sock, frame, 0);  // Non-blocking write attempt.
                     if (result == 0)
@@ -783,6 +857,7 @@ int main()
         }
 
         // Process received frames by feeding them from SocketCAN to libcanard.
+        // You can service an arbitrary number of redundant interfaces here, libcanard supports that!
         {
             CanardFrame frame                  = {0};
             uint8_t     buf[CANARD_MTU_CAN_FD] = {0};
@@ -802,7 +877,7 @@ int main()
                 const int8_t   canard_result = canardRxAccept(&state.canard, &frame, 0, &transfer);
                 if (canard_result > 0)
                 {
-                    processReceivedTransfer(&state, &transfer, now);
+                    processReceivedTransfer(&state, &transfer, monotonic_time);
                     state.canard.memory_free(&state.canard, (void*) transfer.payload);
                 }
                 else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
