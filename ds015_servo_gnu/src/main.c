@@ -20,6 +20,7 @@
 
 #include <uavcan/node/Heartbeat_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
+#include <uavcan/node/ExecuteCommand_1_1.h>
 #include <uavcan/node/port/List_0_1.h>
 #include <uavcan/_register/Access_1_0.h>
 #include <uavcan/_register/List_1_0.h>
@@ -36,6 +37,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <time.h>
+#include <unistd.h>
 
 #define KILO 1000L
 #define MEGA ((int64_t) KILO * KILO)
@@ -101,6 +103,9 @@ typedef struct State
         uint64_t servo_1Hz_loop;
     } next_transfer_id;
 } State;
+
+/// This flag is raised when the node is requested to restart.
+static volatile bool g_restart_required = false;
 
 /// A deeply embedded system should sample a microsecond-resolution non-overflowing 64-bit timer.
 /// Here is a simple non-blocking implementation as an example:
@@ -181,8 +186,6 @@ static CanardPortID getSubjectID(const SubjectRole role, const char* const port_
 /// Invoked at the rate of the fastest loop.
 static void handleFastLoop(State* const state, const CanardMicrosecond monotonic_time)
 {
-    (void) state;
-    (void) monotonic_time;
     // Apply control inputs if armed.
     if (state->servo.arming.armed)
     {
@@ -195,12 +198,14 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     }
     else
     {
-        fprintf(stderr, "\rDISARMED\r");
+        fprintf(stderr, "\rDISARMED    \r");
     }
 
+    const bool     anonymous         = state->canard.node_id > CANARD_NODE_ID_MAX;
     const uint64_t servo_transfer_id = state->next_transfer_id.servo_fast_loop++;
 
     // Publish feedback.
+    if (!anonymous)
     {
         reg_drone_service_actuator_common_Feedback_0_1 msg = {0};
         msg.heartbeat.readiness.value = state->servo.arming.armed ? reg_drone_service_common_Readiness_0_1_ENGAGED
@@ -230,6 +235,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     }
 
     // Publish dynamics.
+    if (!anonymous)
     {
         reg_drone_physics_dynamics_translation_LinearTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
@@ -263,6 +269,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     }
 
     // Publish power.
+    if (!anonymous)
     {
         reg_drone_physics_electricity_PowerTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
@@ -398,7 +405,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                                       (uint64_t)(reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
     {
         state->servo.arming.armed = false;
-        puts("Disarmed by timeout");
+        puts("Disarmed by timeout ");
     }
 }
 
@@ -508,6 +515,52 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
                                    uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_);
     }
     // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
+}
+
+static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
+    const uavcan_node_ExecuteCommand_Request_1_1* req)
+{
+    uavcan_node_ExecuteCommand_Response_1_1 resp = {0};
+    switch (req->command)
+    {
+    case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_BEGIN_SOFTWARE_UPDATE:
+    {
+        char file_name[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1] = {0};
+        memcpy(file_name, req->parameter.elements, req->parameter.count);
+        file_name[req->parameter.count] = '\0';
+        // TODO: invoke the bootloader with the specified file name.
+        printf("Firmware update request; filename: '%s' \n", &file_name[0]);
+        resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_STATE;  // This is a stub.
+        break;
+    }
+    case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_FACTORY_RESET:
+    {
+        registerDoFactoryReset();
+        resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+        break;
+    }
+    case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_RESTART:
+    {
+        g_restart_required = true;
+        resp.status        = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+        break;
+    }
+    case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_STORE_PERSISTENT_STATES:
+    {
+        // If your registers are not automatically synchronized with the non-volatile storage, use this command
+        // to commit them to the storage explicitly. Otherwise it is safe to remove it.
+        // In this demo, the registers are stored in files, so there is nothing to do.
+        resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+        break;
+    }
+        // You can add vendor-specific commands here as well.
+    default:
+    {
+        resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_COMMAND;
+        break;
+    }
+    }
+    return resp;
 }
 
 /// Performance notice: the register storage may be slow to access depending on its implementation (e.g., if it is
@@ -675,6 +728,26 @@ static void processReceivedTransfer(State* const state, const CanardTransfer* co
                 }
             }
         }
+        else if (transfer->port_id == uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_)
+        {
+            uavcan_node_ExecuteCommand_Request_1_1 req  = {0};
+            size_t                                 size = transfer->payload_size;
+            if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload, &size) >= 0)
+            {
+                const uavcan_node_ExecuteCommand_Response_1_1 resp = processRequestExecuteCommand(&req);
+                uint8_t serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                size_t  serialized_size = sizeof(serialized);
+                if (uavcan_node_ExecuteCommand_Response_1_1_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
+                {
+                    CanardTransfer rt = *transfer;  // Response transfers are similar to their requests.
+                    rt.timestamp_usec = transfer->timestamp_usec + MEGA;
+                    rt.transfer_kind  = CanardTransferKindResponse;
+                    rt.payload_size   = serialized_size;
+                    rt.payload        = &serialized[0];
+                    (void) canardTxPush(&state->canard, &rt);
+                }
+            }
+        }
         else
         {
             assert(false);  // Seems like we have set up a port subscription without a handler -- bad implementation.
@@ -699,7 +772,9 @@ static void canardFree(CanardInstance* const ins, void* const pointer)
     o1heapFree(heap, pointer);
 }
 
-int main()
+extern char** environ;
+
+int main(const int argc, char* const argv[])
 {
     State state = {0};
 
@@ -802,7 +877,7 @@ int main()
             return -res;
         }
     }
-    if (state.port_id.sub.servo_setpoint <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    if (state.port_id.sub.servo_setpoint <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if not configured.
     {
         static CanardRxSubscription rx;
         const int8_t                res =  //
@@ -817,8 +892,7 @@ int main()
             return -res;
         }
     }
-    if (state.port_id.sub.servo_readiness <=
-        CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    if (state.port_id.sub.servo_readiness <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if not configured.
     {
         static CanardRxSubscription rx;
         const int8_t                res =  //
@@ -841,6 +915,20 @@ int main()
                               CanardTransferKindRequest,
                               uavcan_node_GetInfo_1_0_FIXED_PORT_ID_,
                               uavcan_node_GetInfo_Request_1_0_EXTENT_BYTES_,
+                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              &rx);
+        if (res < 0)
+        {
+            return -res;
+        }
+    }
+    {
+        static CanardRxSubscription rx;
+        const int8_t                res =  //
+            canardRxSubscribe(&state.canard,
+                              CanardTransferKindRequest,
+                              uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_,
+                              uavcan_node_ExecuteCommand_Request_1_1_EXTENT_BYTES_,
                               CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
                               &rx);
         if (res < 0)
@@ -885,12 +973,11 @@ int main()
     CanardMicrosecond       next_fast_iter_at                   = state.started_at + fast_loop_period;
     CanardMicrosecond       next_1_hz_iter_at                   = state.started_at + MEGA;
     CanardMicrosecond       next_01_hz_iter_at                  = state.started_at + MEGA * 10;
-    while (true)
+    do
     {
         // Run a trivial scheduler polling the loops that run the business logic.
         CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
-        if (monotonic_time >=
-            next_fast_iter_at)  // The fastest loop is the most jitter-sensitive so it is to be handled first.
+        if (monotonic_time >= next_fast_iter_at)
         {
             next_fast_iter_at += fast_loop_period;
             handleFastLoop(&state, monotonic_time);
@@ -900,8 +987,7 @@ int main()
             next_1_hz_iter_at += MEGA;
             handle1HzLoop(&state, monotonic_time);
         }
-        if (monotonic_time >=
-            next_01_hz_iter_at)  // The slowest loop is the least jitter-sensitive so it is to be handled last.
+        if (monotonic_time >= next_01_hz_iter_at)
         {
             next_01_hz_iter_at += MEGA * 10;
             handle01HzLoop(&state, monotonic_time);
@@ -971,7 +1057,9 @@ int main()
                 }
             }
         }
-    }
+    } while (!g_restart_required || (canardTxPeek(&state.canard) != NULL));  // Do not stop until all frames are sent.
 
-    return 0;
+    (void) argc;
+    puts("RESTART ");
+    return -execve(argv[0], argv, environ);
 }

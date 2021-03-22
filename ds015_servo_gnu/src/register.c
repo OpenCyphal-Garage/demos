@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <unistd.h>
 
 static const char RegistryDirName[] = "registry";
 
@@ -146,4 +147,24 @@ bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_
     REGISTER_CASE_SAME_TYPE(real32)
     REGISTER_CASE_SAME_TYPE(real16)
     return false;
+}
+
+void registerDoFactoryReset(void)
+{
+    DIR* const dp = opendir(RegistryDirName);
+    if (dp != NULL)
+    {
+        struct dirent* ep = readdir(dp);
+        while (ep != NULL)
+        {
+            if (ep->d_type == DT_REG)
+            {
+                char file_path[uavcan_register_Name_1_0_name_ARRAY_CAPACITY_ + sizeof(RegistryDirName) + 2] = {0};
+                (void) snprintf(&file_path[0], sizeof(file_path), "%s/%s", RegistryDirName, ep->d_name);
+                (void) unlink(&file_path[0]);
+            }
+            ep = readdir(dp);
+        }
+        (void) closedir(dp);
+    }
 }

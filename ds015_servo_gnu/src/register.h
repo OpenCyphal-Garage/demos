@@ -53,3 +53,6 @@ uavcan_register_Name_1_0 registerGetNameByIndex(const uint16_t index);
 /// The return value is true if the assignment has been performed, false if it is not possible
 /// (in the latter case the destination is NOT modified).
 bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src);
+
+/// Erase all registers such that the defaults are used at the next launch.
+void registerDoFactoryReset(void);
