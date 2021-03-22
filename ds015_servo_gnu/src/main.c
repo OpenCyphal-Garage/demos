@@ -15,6 +15,7 @@
 /// Author: Pavel Kirienko <pavel@uavcan.org>
 
 #include "socketcan.h"
+#include "register.h"
 #include <o1heap.h>
 
 #include <uavcan/node/Heartbeat_1_0.h>
@@ -33,9 +34,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <stdbool.h>
-#include <sys/stat.h>
-#include <dirent.h>
 #include <time.h>
 
 #define KILO 1000L
@@ -94,123 +92,6 @@ static CanardMicrosecond getMonotonicMicroseconds()
         abort();
     }
     return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
-}
-
-/// Copy one value to the other if their types and dimensionality are the same or automatic conversion is possible.
-/// If the destination is empty, it is simply replaced with the source (assignment always succeeds).
-/// The return value is true if the assignment has been performed, false if it is not possible
-/// (in the latter case the destination is NOT modified).
-/// This function looks gnarly because C has no support for metaprogramming.
-static bool registerAssignValue(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src)
-{
-    if (uavcan_register_Value_1_0_is_empty_(dst))
-    {
-        *dst = *src;
-        return true;
-    }
-    if ((uavcan_register_Value_1_0_is_string_(dst) && uavcan_register_Value_1_0_is_string_(src)) ||
-        (uavcan_register_Value_1_0_is_unstructured_(dst) && uavcan_register_Value_1_0_is_unstructured_(src)))
-    {
-        *dst = *src;
-        return true;
-    }
-    if (uavcan_register_Value_1_0_is_bit_(dst) && uavcan_register_Value_1_0_is_bit_(src))
-    {
-        nunavutCopyBits(dst->bit.value.bitpacked,
-                        0,
-                        nunavutChooseMin(dst->bit.value.count, src->bit.value.count),
-                        src->bit.value.bitpacked,
-                        0);
-        return true;
-    }
-    // This is a violation of MISRA/AUTOSAR but it is believed to be less error-prone than manually copy-pasted code.
-#define REGISTER_CASE_PASTE3_IMPL(x, y, z) x##y##z
-#define REGISTER_CASE_PASTE3(x, y, z) REGISTER_CASE_PASTE3_IMPL(x, y, z)
-#define REGISTER_CASE_SAME_TYPE(TYPE)                                                               \
-    if (REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(dst) &&                        \
-        REGISTER_CASE_PASTE3(uavcan_register_Value_1_0_is_, TYPE, _)(src))                          \
-    {                                                                                               \
-        for (size_t i = 0; i < nunavutChooseMin(dst->TYPE.value.count, src->TYPE.value.count); ++i) \
-        {                                                                                           \
-            dst->TYPE.value.elements[i] = src->TYPE.value.elements[i];                              \
-        }                                                                                           \
-        return true;                                                                                \
-    }
-    REGISTER_CASE_SAME_TYPE(integer64)
-    REGISTER_CASE_SAME_TYPE(integer32)
-    REGISTER_CASE_SAME_TYPE(integer16)
-    REGISTER_CASE_SAME_TYPE(integer8)
-    REGISTER_CASE_SAME_TYPE(natural64)
-    REGISTER_CASE_SAME_TYPE(natural32)
-    REGISTER_CASE_SAME_TYPE(natural16)
-    REGISTER_CASE_SAME_TYPE(natural8)
-    REGISTER_CASE_SAME_TYPE(real64)
-    REGISTER_CASE_SAME_TYPE(real32)
-    REGISTER_CASE_SAME_TYPE(real16)
-    return false;
-}
-
-static const char RegistryDirName[] = "registry";
-
-/// An internal helper for opening register files.
-/// An actual implementation on an embedded system may need to perform atomic file transactions via rename().
-static FILE* registerOpen(const char* const register_name, const bool write)
-{
-    char file_path[300] = {0};
-    (void) snprintf(&file_path[0], sizeof(file_path), "%s/%s", RegistryDirName, register_name);
-    if (write)
-    {
-        (void) mkdir(RegistryDirName, S_IRWXU | S_IRWXG | S_IRWXO);
-    }
-    return fopen(&file_path[0], write ? "wb" : "rb");
-}
-
-/// Store the given register value into the persistent storage.
-/// In this demo, we use the filesystem for persistence. A real embedded application would typically use some
-/// non-volatile memory for the same purpose (e.g., direct writes into the on-chip EEPROM);
-/// more complex embedded systems might leverage a fault-tolerant embedded filesystem like LittleFS.
-static void registerWrite(const char* const register_name, const uavcan_register_Value_1_0* const value)
-{
-    uint8_t      serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
-    size_t       sr_size                                             = uavcan_register_Value_1_0_EXTENT_BYTES_;
-    const int8_t err = uavcan_register_Value_1_0_serialize_(value, serialized, &sr_size);
-    if (err >= 0)
-    {
-        FILE* const fp = registerOpen(&register_name[0], true);
-        if (fp != NULL)
-        {
-            (void) fwrite(&serialized[0], 1U, sr_size, fp);
-            (void) fclose(fp);
-        }
-    }
-}
-
-/// Reads the specified register from the persistent storage into `inout_value`.
-/// If the register does not exist or it cannot be automatically converted to the type of the provided argument,
-/// the default will be stored into the persistent storage using @ref registerWrite().
-/// The default will not be stored if the argument is empty.
-static void registerRead(const char* const register_name, uavcan_register_Value_1_0* const inout_default)
-{
-    assert(inout_default != NULL);
-    bool init_required = !uavcan_register_Value_1_0_is_empty_(inout_default);
-    FILE* const fp = registerOpen(&register_name[0], false);
-    if (fp != NULL)
-    {
-        uint8_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
-        size_t  sr_size = fread(&serialized[0], 1U, uavcan_register_Value_1_0_EXTENT_BYTES_, fp);
-        (void) fclose(fp);
-        uavcan_register_Value_1_0 out = {0};
-        const int8_t              err = uavcan_register_Value_1_0_deserialize_(&out, serialized, &sr_size);
-        if (err >= 0)
-        {
-            init_required = !registerAssignValue(inout_default, &out);
-        }
-    }
-    if (init_required)
-    {
-        printf("Init register: %s\n", register_name);
-        registerWrite(register_name, inout_default);
-    }
 }
 
 // Returns the 128-bit unique-ID of the local node. This value is used in uavcan.node.GetInfo.Response and during the
@@ -464,7 +345,7 @@ static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const ua
         uavcan_register_Value_1_0_select_empty_(&resp.value);
         registerRead(&name[0], &resp.value);
         // If such register exists and it can be assigned from the request value:
-        if (!uavcan_register_Value_1_0_is_empty_(&resp.value) && registerAssignValue(&resp.value, &req->value))
+        if (!uavcan_register_Value_1_0_is_empty_(&resp.value) && registerAssign(&resp.value, &req->value))
         {
             registerWrite(&name[0], &resp.value);
         }
@@ -484,40 +365,6 @@ static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const ua
     // Our node does not synchronize its time with the network so we can't populate the timestamp.
     resp.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
 
-    return resp;
-}
-
-static uavcan_register_List_Response_1_0 processRequestRegisterList(const uavcan_register_List_Request_1_0* const req)
-{
-    uavcan_register_List_Response_1_0 resp = {0};
-    DIR* const                        dp   = opendir(RegistryDirName);
-    if (dp != NULL)
-    {
-        // The service definition requires that the ordering is consistent between calls.
-        // We assume here that there will be no new registers added while the listing operation is in progress.
-        // If this is not the case, you will need to implement additional logic to uphold the ordering consistency
-        // guarantee, such as sorting registers by creation time or adding extra metadata.
-        struct dirent* ep = readdir(dp);
-        uint16_t       ii = 0;
-        while (ep != NULL)
-        {
-            if (ep->d_type == DT_REG)
-            {
-                if (ii >= req->index)
-                {
-                    break;
-                }
-                ++ii;
-            }
-            ep = readdir(dp);
-        }
-        if (ep != NULL)
-        {
-            resp.name.name.count = nunavutChooseMin(strlen(ep->d_name), uavcan_register_Name_1_0_name_ARRAY_CAPACITY_);
-            memcpy(resp.name.name.elements, ep->d_name, resp.name.name.count);
-        }
-        (void) closedir(dp);
-    }
     return resp;
 }
 
@@ -616,7 +463,7 @@ static void processReceivedTransfer(State* const                state,
             size_t                           size = transfer->payload_size;
             if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
             {
-                const uavcan_register_List_Response_1_0 resp = processRequestRegisterList(&req);
+                const uavcan_register_List_Response_1_0 resp = {.name = registerGetNameByIndex(req.index)};
                 uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
                 size_t  serialized_size = sizeof(serialized);
                 if (uavcan_register_List_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)

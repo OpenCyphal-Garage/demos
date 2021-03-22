@@ -61,7 +61,10 @@ add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
 # Build the application.
-aux_source_directory(${CMAKE_SOURCE_DIR}/src sources)
-add_executable(ds015_servo_demo ${sources})
+add_executable(ds015_servo_demo
+        src/main.c
+        src/register.c
+        src/socketcan.c
+)
 add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)
 target_link_libraries(ds015_servo_demo canard o1heap)
