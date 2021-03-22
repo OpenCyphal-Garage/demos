@@ -47,6 +47,22 @@ typedef struct State
     O1HeapInstance* heap;
     CanardInstance  canard;
 
+    /// The state of the business logic.
+    struct
+    {
+        /// Whether the servo is supposed to actuate the load or to stay idle (safe low-power mode).
+        bool armed;
+
+        /// Setpoint & motion profile (unsupported constraints are to be ignored).
+        /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
+        /// As described in the linked documentation, there are two kinds of servos supported: linear and rotary.
+        /// Units per-kind are:   LINEAR                 ROTARY
+        float position;      ///< [meter]                [radian]
+        float velocity;      ///< [meter/second]         [radian/second]
+        float acceleration;  ///< [(meter/second)^2]     [(radian/second)^2]
+        float force;         ///< [newton]               [netwon*meter]
+    } servo;
+
     /// These values are read from the registers at startup. You can also implement hot reloading if desired.
     /// The subjects of the servo network service are defined in the DS-015 data type definitions here:
     /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
@@ -75,6 +91,11 @@ typedef struct State
         uint64_t uavcan_node_heartbeat;
         uint64_t uavcan_node_port_list;
         uint64_t uavcan_pnp_allocation;
+        // See the corresponding subject-ID fields above:
+        uint64_t servo_feedback;
+        uint64_t servo_status;
+        uint64_t servo_power;
+        uint64_t servo_dynamics;
     } next_transfer_id;
 } State;
 
@@ -312,6 +333,22 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
     }
 }
 
+/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
+static void processMessageServoSetpoint(State* const                                                   state,
+                                        const reg_drone_physics_dynamics_translation_Linear_0_1* const msg)
+{
+    state->servo.position     = msg->kinematics.position.meter;
+    state->servo.velocity     = msg->kinematics.velocity.meter_per_second;
+    state->servo.acceleration = msg->kinematics.acceleration.meter_per_second_per_second;
+    state->servo.force        = msg->force.newton;
+}
+
+/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/common/Readiness.0.1.uavcan
+static void processMessageServiceReadiness(State* const state, const reg_drone_service_common_Readiness_0_1* const msg)
+{
+    state->servo.armed = msg->value >= reg_drone_service_common_Readiness_0_1_ENGAGED;
+}
+
 static void processMessagePlugAndPlayNodeIDAllocation(State* const                                     state,
                                                       const uavcan_pnp_NodeIDAllocationData_2_0* const msg)
 {
@@ -398,23 +435,37 @@ static void processReceivedTransfer(State* const                state,
 {
     if (transfer->transfer_kind == CanardTransferKindMessage)
     {
-        if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)  // PnP node-ID allocation resp.
+        size_t size = transfer->payload_size;
+        if (transfer->port_id == state->port_id.sub.setpoint)
         {
-            uavcan_pnp_NodeIDAllocationData_2_0 msg  = {0};
-            size_t                              size = transfer->payload_size;
+            reg_drone_physics_dynamics_translation_Linear_0_1 msg = {0};
+            if (reg_drone_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            {
+                processMessageServoSetpoint(state, &msg);
+            }
+        }
+        else if (transfer->port_id == state->port_id.sub.readiness)
+        {
+            reg_drone_service_common_Readiness_0_1 msg = {0};
+            if (reg_drone_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            {
+                processMessageServiceReadiness(state, &msg);
+            }
+        }
+        else if (transfer->port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
+        {
+            uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
             if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
         }
-        // TODO: handle servo messages.
         else
         {
             assert(false);  // Seems like we have set up a port subscription without a handler -- bad implementation.
         }
     }
-
-    if (transfer->transfer_kind == CanardTransferKindRequest)
+    else if (transfer->transfer_kind == CanardTransferKindRequest)
     {
         if (transfer->port_id == uavcan_node_GetInfo_1_0_FIXED_PORT_ID_)
         {
@@ -481,6 +532,10 @@ static void processReceivedTransfer(State* const                state,
         {
             assert(false);  // Seems like we have set up a port subscription without a handler -- bad implementation.
         }
+    }
+    else
+    {
+        assert(false);  // Bad implementation -- check your subscriptions.
     }
 }
 
