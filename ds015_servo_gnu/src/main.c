@@ -75,15 +75,15 @@ typedef struct State
     {
         struct
         {
-            CanardPortID feedback;  //< reg.drone.service.actuator.common.Feedback
-            CanardPortID status;    //< reg.drone.service.actuator.common.Status
-            CanardPortID power;     //< reg.drone.physics.electricity.PowerTs
-            CanardPortID dynamics;  //< (timestamped dynamics)
+            CanardPortID servo_feedback;  //< reg.drone.service.actuator.common.Feedback
+            CanardPortID servo_status;    //< reg.drone.service.actuator.common.Status
+            CanardPortID servo_power;     //< reg.drone.physics.electricity.PowerTs
+            CanardPortID servo_dynamics;  //< (timestamped dynamics)
         } pub;
         struct
         {
-            CanardPortID setpoint;   //< (non-timestamped dynamics)
-            CanardPortID readiness;  //< reg.drone.service.common.Readiness
+            CanardPortID servo_setpoint;   //< (non-timestamped dynamics)
+            CanardPortID servo_readiness;  //< reg.drone.service.common.Readiness
         } sub;
     } port_id;
 
@@ -96,11 +96,9 @@ typedef struct State
         uint64_t uavcan_node_heartbeat;
         uint64_t uavcan_node_port_list;
         uint64_t uavcan_pnp_allocation;
-        // See the corresponding subject-ID fields above:
-        uint64_t servo_feedback;
-        uint64_t servo_status;
-        uint64_t servo_power;
-        uint64_t servo_dynamics;
+        // Messages published synchronously can share the same transfer-ID:
+        uint64_t servo_fast_loop;
+        uint64_t servo_1Hz_loop;
     } next_transfer_id;
 } State;
 
@@ -200,19 +198,97 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         fprintf(stderr, "\rDISARMED\r");
     }
 
+    const uint64_t servo_transfer_id = state->next_transfer_id.servo_fast_loop++;
+
     // Publish feedback.
     {
-        ;
+        reg_drone_service_actuator_common_Feedback_0_1 msg = {0};
+        msg.heartbeat.readiness.value = state->servo.arming.armed ? reg_drone_service_common_Readiness_0_1_ENGAGED
+                                                                  : reg_drone_service_common_Readiness_0_1_STANDBY;
+        // If there are any hardware or configuration issues, report them here:
+        msg.heartbeat.health.value = uavcan_node_Health_1_0_NOMINAL;
+        // Serialize and publish the message:
+        uint8_t      serialized[reg_drone_service_actuator_common_Feedback_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        size_t       serialized_size = sizeof(serialized);
+        const int8_t err =
+            reg_drone_service_actuator_common_Feedback_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+        assert(err >= 0);
+        if (err >= 0)
+        {
+            const CanardTransfer transfer = {
+                .timestamp_usec = monotonic_time + 10 * KILO,
+                .priority       = CanardPriorityHigh,
+                .transfer_kind  = CanardTransferKindMessage,
+                .port_id        = state->port_id.pub.servo_feedback,
+                .remote_node_id = CANARD_NODE_ID_UNSET,
+                .transfer_id    = (CanardTransferID) servo_transfer_id,
+                .payload_size   = serialized_size,
+                .payload        = &serialized[0],
+            };
+            (void) canardTxPush(&state->canard, &transfer);
+        }
     }
 
     // Publish dynamics.
     {
-        ;
+        reg_drone_physics_dynamics_translation_LinearTs_0_1 msg = {0};
+        // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
+        msg.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
+        // A real application would source these values from the hardware; we republish the setpoint for demo purposes.
+        // TODO populate real values:
+        msg.value.kinematics.position.meter                           = state->servo.position;
+        msg.value.kinematics.velocity.meter_per_second                = state->servo.velocity;
+        msg.value.kinematics.acceleration.meter_per_second_per_second = state->servo.acceleration;
+        msg.value.force.newton                                        = state->servo.force;
+        // Serialize and publish the message:
+        uint8_t serialized[reg_drone_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        size_t  serialized_size = sizeof(serialized);
+        const int8_t err =
+            reg_drone_physics_dynamics_translation_LinearTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+        assert(err >= 0);
+        if (err >= 0)
+        {
+            const CanardTransfer transfer = {
+                .timestamp_usec = monotonic_time + 10 * KILO,
+                .priority       = CanardPriorityHigh,
+                .transfer_kind  = CanardTransferKindMessage,
+                .port_id        = state->port_id.pub.servo_dynamics,
+                .remote_node_id = CANARD_NODE_ID_UNSET,
+                .transfer_id    = (CanardTransferID) servo_transfer_id,
+                .payload_size   = serialized_size,
+                .payload        = &serialized[0],
+            };
+            (void) canardTxPush(&state->canard, &transfer);
+        }
     }
 
     // Publish power.
     {
-        ;
+        reg_drone_physics_electricity_PowerTs_0_1 msg = {0};
+        // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
+        msg.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
+        // TODO populate real values:
+        msg.value.current.ampere = 20.315F;
+        msg.value.voltage.volt   = 51.3F;
+        // Serialize and publish the message:
+        uint8_t serialized[reg_drone_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        size_t  serialized_size = sizeof(serialized);
+        const int8_t err = reg_drone_physics_electricity_PowerTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+        assert(err >= 0);
+        if (err >= 0)
+        {
+            const CanardTransfer transfer = {
+                .timestamp_usec = monotonic_time + 10 * KILO,
+                .priority       = CanardPriorityHigh,
+                .transfer_kind  = CanardTransferKindMessage,
+                .port_id        = state->port_id.pub.servo_power,
+                .remote_node_id = CANARD_NODE_ID_UNSET,
+                .transfer_id    = (CanardTransferID) servo_transfer_id,
+                .payload_size   = serialized_size,
+                .payload        = &serialized[0],
+            };
+            (void) canardTxPush(&state->canard, &transfer);
+        }
     }
 }
 
@@ -289,6 +365,8 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         }
     }
 
+    const uint64_t servo_transfer_id = state->next_transfer_id.servo_1Hz_loop++;
+
     if (!anonymous)
     {
         // Publish the servo status -- this is a low-rate message with low-severity diagnostics.
@@ -305,9 +383,9 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .timestamp_usec = monotonic_time + MEGA,
                 .priority       = CanardPriorityNominal,
                 .transfer_kind  = CanardTransferKindMessage,
-                .port_id        = state->port_id.pub.status,
+                .port_id        = state->port_id.pub.servo_status,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.servo_status++),
+                .transfer_id    = (CanardTransferID) servo_transfer_id,
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -341,21 +419,21 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
             size_t* const cnt                                 = &m.publishers.sparse_list.count;
             m.publishers.sparse_list.elements[(*cnt)++].value = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_;
             m.publishers.sparse_list.elements[(*cnt)++].value = uavcan_node_port_List_0_1_FIXED_PORT_ID_;
-            if (state->port_id.pub.feedback <= CANARD_SUBJECT_ID_MAX)
+            if (state->port_id.pub.servo_feedback <= CANARD_SUBJECT_ID_MAX)
             {
-                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.feedback;
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.servo_feedback;
             }
-            if (state->port_id.pub.status <= CANARD_SUBJECT_ID_MAX)
+            if (state->port_id.pub.servo_status <= CANARD_SUBJECT_ID_MAX)
             {
-                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.status;
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.servo_status;
             }
-            if (state->port_id.pub.power <= CANARD_SUBJECT_ID_MAX)
+            if (state->port_id.pub.servo_power <= CANARD_SUBJECT_ID_MAX)
             {
-                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.power;
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.servo_power;
             }
-            if (state->port_id.pub.dynamics <= CANARD_SUBJECT_ID_MAX)
+            if (state->port_id.pub.servo_dynamics <= CANARD_SUBJECT_ID_MAX)
             {
-                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.dynamics;
+                m.publishers.sparse_list.elements[(*cnt)++].value = state->port_id.pub.servo_dynamics;
             }
         }
 
@@ -507,7 +585,7 @@ static void processReceivedTransfer(State* const                state,
     if (transfer->transfer_kind == CanardTransferKindMessage)
     {
         size_t size = transfer->payload_size;
-        if (transfer->port_id == state->port_id.sub.setpoint)
+        if (transfer->port_id == state->port_id.sub.servo_setpoint)
         {
             reg_drone_physics_dynamics_translation_Linear_0_1 msg = {0};
             if (reg_drone_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
@@ -515,7 +593,7 @@ static void processReceivedTransfer(State* const                state,
                 processMessageServoSetpoint(state, &msg);
             }
         }
-        else if (transfer->port_id == state->port_id.sub.readiness)
+        else if (transfer->port_id == state->port_id.sub.servo_readiness)
         {
             reg_drone_service_common_Readiness_0_1 msg = {0};
             if (reg_drone_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
@@ -683,28 +761,28 @@ int main()
     // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/README.md
     // As follows from the Specification, the register group name prefix can be arbitrary; here we just use "servo".
     // Publications:
-    state.port_id.pub.feedback =  // High-rate status information: all good or not, engaged or sleeping.
+    state.port_id.pub.servo_feedback =  // High-rate status information: all good or not, engaged or sleeping.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.feedback",
                      reg_drone_service_actuator_common_Feedback_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.pub.status =  // A low-rate high-level status overview: temperatures, fault flags, errors.
+    state.port_id.pub.servo_status =  // A low-rate high-level status overview: temperatures, fault flags, errors.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.status",
                      reg_drone_service_actuator_common_Status_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.pub.power =  // Electric power input measurements (voltage and current).
+    state.port_id.pub.servo_power =  // Electric power input measurements (voltage and current).
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.power",
                      reg_drone_physics_electricity_PowerTs_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.pub.dynamics =  // Position/speed/acceleration/force feedback.
+    state.port_id.pub.servo_dynamics =  // Position/speed/acceleration/force feedback.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.dynamics",
                      reg_drone_physics_dynamics_translation_LinearTs_0_1_FULL_NAME_AND_VERSION_);
     // Subscriptions:
-    state.port_id.sub.setpoint =  // This message actually commands the servo setpoint with the motion profile.
+    state.port_id.sub.servo_setpoint =  // This message actually commands the servo setpoint with the motion profile.
         getSubjectID(SUBJECT_ROLE_SUBSCRIBER,
                      "servo.setpoint",
                      reg_drone_physics_dynamics_translation_Linear_0_1_FULL_NAME_AND_VERSION_);
-    state.port_id.sub.readiness =  // Arming subject: whether to act upon the setpoint or to stay idle.
+    state.port_id.sub.servo_readiness =  // Arming subject: whether to act upon the setpoint or to stay idle.
         getSubjectID(SUBJECT_ROLE_SUBSCRIBER,
                      "servo.readiness",
                      reg_drone_service_common_Readiness_0_1_FULL_NAME_AND_VERSION_);
@@ -726,13 +804,13 @@ int main()
             return -res;
         }
     }
-    if (state.port_id.sub.setpoint <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    if (state.port_id.sub.servo_setpoint <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
     {
         static CanardRxSubscription rx;
         const int8_t                res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
-                              state.port_id.sub.setpoint,
+                              state.port_id.sub.servo_setpoint,
                               reg_drone_physics_dynamics_translation_Linear_0_1_EXTENT_BYTES_,
                               CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
                               &rx);
@@ -741,13 +819,14 @@ int main()
             return -res;
         }
     }
-    if (state.port_id.sub.readiness <= CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
+    if (state.port_id.sub.servo_readiness <=
+        CANARD_SUBJECT_ID_MAX)  // Do not subscribe if subject-ID is not configured.
     {
         static CanardRxSubscription rx;
         const int8_t                res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
-                              state.port_id.sub.readiness,
+                              state.port_id.sub.servo_readiness,
                               reg_drone_service_common_Readiness_0_1_EXTENT_BYTES_,
                               CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
                               &rx);
