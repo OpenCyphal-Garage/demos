@@ -7,7 +7,7 @@
 ///                        ----o------o------------o---------o------o---------o-------
 ///
 /// A demo application showcasing the implementation of a Dronecode UAVCAN Drone Standard DS-015 servo network service.
-/// This application is intended to run on any POSIX system but it is trivially adaptable to baremetal environments.
+/// This application is intended to run on GNU/Linux but it is trivially adaptable to baremetal environments.
 /// Please refer to the enclosed README for details.
 ///
 /// This software is distributed under the terms of the MIT License.
