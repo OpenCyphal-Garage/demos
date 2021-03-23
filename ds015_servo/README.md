@@ -144,7 +144,37 @@ yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
 
 ## Porting
 
-Just read the code.
+Under platform there are three headers:
+
+- monotonic_time.h
+- register.h
+- socketcan.h
+
+To port to any given platform implement the methods defined in these headers.
 
 The files `socketcan.[ch]` were taken from <https://github.com/UAVCAN/platform_specific_components>.
 You may (or may not) find something relevant for your target platform there, too.
+
+### Platform Build
+
+> **TODO** This is a work in progress but we have stubbed out a version of this demo that will run on the NXP S32K142 MCU. This section shows you how to build for
+that platform. By default the build and the proceeding instructions are all for
+a generic linux platform.
+
+To build for one of the additional platforms provided in this demo first make sure
+that the following are available in your host environment:
+
+- nnvg
+- arm-none-eabi-gcc
+
+Then use the `DS015_SERVO_DEMO_PLATFORM` cmake variable when you configure the
+project:
+
+```
+mkdir build
+cd build
+cmake -DDS015_SERVO_DEMO_PLATFORM=s32k142 ..
+make help
+```
+
+This will setup targets to build a firmware application as an elf, hex, and Intel-binary (all three are the same).

@@ -1,0 +1,14 @@
+[
+    {
+        "name": "s32k142",
+        "cmakeSettings": {
+            "DS015_SERVO_DEMO_PLATFORM": "s32k142"
+        }
+    },
+    {
+        "name": "linux",
+        "cmakeSettings": {
+            "DS015_SERVO_DEMO_PLATFORM": "linux"
+        }
+    }
+]
