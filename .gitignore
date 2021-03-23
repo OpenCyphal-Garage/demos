@@ -34,6 +34,7 @@ Mkfile.old
 dkms.conf
 build/
 cmake-build*/
+build_vscode
 
 # DSDL compilation outputs
 .compiled/
@@ -44,5 +45,4 @@ cmake-build*/
 **/.idea/*
 !**/.idea/dictionaries
 !**/.idea/dictionaries/*
-.vscode
 

@@ -14,8 +14,10 @@
 /// Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
 /// Author: Pavel Kirienko <pavel@uavcan.org>
 
+#include "canard.h"
 #include "socketcan.h"
 #include "register.h"
+#include "monotonic_time.h"
 #include <o1heap.h>
 
 #include <uavcan/node/Heartbeat_1_0.h>
@@ -36,7 +38,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <time.h>
 #include <unistd.h>
 
 #define KILO 1000L
@@ -106,22 +107,6 @@ typedef struct State
 
 /// This flag is raised when the node is requested to restart.
 static volatile bool g_restart_required = false;
-
-/// A deeply embedded system should sample a microsecond-resolution non-overflowing 64-bit timer.
-/// Here is a simple non-blocking implementation as an example:
-/// https://github.com/PX4/sapog/blob/601f4580b71c3c4da65cc52237e62a/firmware/src/motor/realtime/motor_timer.c#L233-L274
-/// Mind the difference between monotonic time and wall time. Monotonic time never changes rate or makes leaps,
-/// it is therefore impossible to synchronize with an external reference. Wall time can be synchronized and therefore
-/// it may change rate or make leap adjustments. The two kinds of time serve completely different purposes.
-static CanardMicrosecond getMonotonicMicroseconds()
-{
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    {
-        abort();
-    }
-    return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
-}
 
 // Returns the 128-bit unique-ID of the local node. This value is used in uavcan.node.GetInfo.Response and during the
 // plug-and-play node-ID allocation by uavcan.pnp.NodeIDAllocationData. The function is infallible.
