@@ -4,6 +4,7 @@
 
 #include "monotonic_time.h"
 #include <time.h>
+#include <stdlib.h>
 
 CanardMicrosecond getMonotonicMicroseconds()
 {
