@@ -4,9 +4,16 @@
 
 cmake_minimum_required(VERSION 3.17)
 project(ds015_servo_demo C CXX)
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
+
+if (NOT DEFINED DS015_SERVO_DEMO_PLATFORM)
+    set(DS015_SERVO_DEMO_PLATFORM "linux")
+    message(STATUS "Setting DS015_SERVO_DEMO_PLATFORM = ${DS015_SERVO_DEMO_PLATFORM}")
+else()
+    message(STATUS "Using ${DS015_SERVO_DEMO_PLATFORM} for DS015_SERVO_DEMO_PLATFORM")
+endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror -pedantic -fstrict-aliasing")
@@ -60,11 +67,22 @@ include_directories(SYSTEM ${submodules}/libcanard/libcanard)
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
+# Build the media layer
+file(GLOB MEDIA_LAYER_SOURCE
+     LIST_DIRECTORIES false
+     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+     media/${DS015_SERVO_DEMO_PLATFORM}/src/*.c
+)
+
+add_library(media STATIC ${MEDIA_LAYER_SOURCE})
+include_directories(SYSTEM media/${DS015_SERVO_DEMO_PLATFORM}/include/
+                           media/)
+
 # Build the application.
 add_executable(ds015_servo_demo
         src/main.c
         src/register.c
-        src/socketcan.c
 )
+
 add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)
-target_link_libraries(ds015_servo_demo canard o1heap)
+target_link_libraries(ds015_servo_demo canard o1heap media)

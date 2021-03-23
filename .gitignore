@@ -44,3 +44,5 @@ cmake-build*/
 **/.idea/*
 !**/.idea/dictionaries
 !**/.idea/dictionaries/*
+.vscode
+
