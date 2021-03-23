@@ -1,0 +1,12 @@
+{
+    // See http://go.microsoft.com/fwlink/?LinkId=827846
+    // for the documentation about the extensions.json format
+    "recommendations": [
+        "uavcan.dsdl",
+        "ms-vscode.cpptools",
+        "twxs.cmake",
+        "ms-vscode.cmake-tools",
+        "xaver.clang-format",
+        "marus25.cortex-debug"
+    ]
+}

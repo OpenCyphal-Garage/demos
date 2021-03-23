@@ -1,4 +1,7 @@
-#
+# Setup arm-none-eabi-gcc toolchain to build the S32K142 firmware
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2021 UAVCAN Consortium <consortium@uavcan.org>
+
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
@@ -27,8 +30,11 @@ set(CMAKE_C_FLAGS "${LOCAL_TOOLCHAIN_GEN_ARGS} -ffunction-sections -fdata-sectio
 set(CMAKE_C_COMPILER ${LOCAL_TOOLCHAIN}-gcc CACHE INTERNAL "C Compiler")
 set(CMAKE_CXX_COMPILER ${LOCAL_TOOLCHAIN}-g++ CACHE INTERNAL "C++ Compiler")
 set(CMAKE_ASM_COMPILER ${LOCAL_TOOLCHAIN}-gcc CACHE INTERNAL "ASM Compiler")
+set(CMAKE_OBJCOPY ${LOCAL_TOOLCHAIN}-objcopy CACHE INTERNAL "Objcopy Utility")
 
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+add_definitions(-DCPU_S32K142)
