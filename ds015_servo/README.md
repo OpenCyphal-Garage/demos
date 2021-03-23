@@ -71,11 +71,11 @@ It will keep doing this forever until it got an allocation response from the nod
 A practical system would always assign static node-ID instead of relying on this behavior to ensure
 deterministic behaviors at startup.
 This, however, cannot be done until we have a node-ID allocated so that we are able to configure the node via UAVCAN.
-Therefore, we launch a PnP node-ID allocator available in Yukon (PX4 also implements one):
+Therefore, we launch a PnP node-ID allocator available in Yakut (PX4 also implements one):
 
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=127                 # This node-ID is for Yukon.
+export UAVCAN__NODE__ID=127                 # This node-ID is for Yakut.
 yakut monitor -P ~/allocation_table.db
 ```
 
@@ -92,7 +92,7 @@ assuming that the node got allocated the node-ID of 125:
 
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=126                 # This node-ID is for Yukon.
+export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
 yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.sub.servo.readiness.id}, value: {natural16: {value: 10}}}"
 yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.sub.servo.setpoint.id},  value: {natural16: {value: 50}}}"
 yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.servo.dynamics.id},  value: {natural16: {value: 100}}}"
@@ -143,7 +143,7 @@ You can erase the configuration and go back to factory defaults as follows:
 
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=126                 # This node-ID is for Yukon.
+export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
 yakut call 77 uavcan.node.ExecuteCommand.1.1 "command: 65532"
 ```
 
