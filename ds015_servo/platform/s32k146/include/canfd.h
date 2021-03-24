@@ -60,8 +60,6 @@ status_t FlexCAN0_Install_ID(uint32_t id, uint8_t mb_index);
 
 status_t FlexCAN0_Send(fdframe_t* frame);
 
-extern void CAN0_ORed_0_15_MB_IRQHandler(void);
-
 #ifdef __cplusplus
 }
 #endif

@@ -21,8 +21,6 @@ uint64_t LPIT0_GetTimestamp(void);
 
 void LPIT0_Ch2_IRQ_Config(uint32_t interrupt_freq, uint8_t interrupt_priority, void (*callback)());
 
-extern void LPIT0_Ch2_IRQHandler(void);
-
 #ifdef __cplusplus
 }
 #endif

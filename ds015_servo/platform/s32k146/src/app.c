@@ -15,9 +15,9 @@
  */
 
 #include "uavcan/node/Heartbeat_1_0.h"
-#include "canard.h"
+#include "libcanard/canard.h"
 #include "canfd.h"
-#include "o1heap.h"
+#include "o1heap/o1heap.h"
 #include "LPIT.h"
 #include "SCG.h"
 #include "S32K146_bitfields.h"

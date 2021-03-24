@@ -48,16 +48,16 @@ typedef struct
 */
 typedef struct
 {
-    uint32_t EPRESDIV:10;
-    uint8_t EPROPSEG:6;
-    uint8_t EPSEG1:5;
-    uint8_t EPSEG2:5;
-    uint8_t ERJW:5;
-    uint32_t FPRESDIV:10;
-    uint8_t FPROPSEG:5;
-    uint8_t FPSEG1:3;
-    uint8_t FPSEG2:3;
-    uint8_t FRJW:3;
+	uint8_t EPRESDIV;
+    uint8_t EPROPSEG;
+    uint8_t EPSEG1;
+    uint8_t EPSEG2;
+    uint8_t ERJW;
+    uint8_t FPRESDIV;
+    uint8_t FPROPSEG;
+    uint8_t FPSEG1;
+    uint8_t FPSEG2;
+    uint8_t FRJW;
 } FlexCAN_bit_timings_t;
 
 // LUT for converting form DLC to byte length in bytes
@@ -218,7 +218,7 @@ static inline void S32_NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority)
 #endif
 
 #define BIT_SRV_NOT_MSG(x) (((uint32_t)(x)) << 25)
-#define BIT_R23(x)    	    (((uint32_t)(x)) << 23)
+#define BIT_R23(x)    	   (((uint32_t)(x)) << 23)
 #define BIT_MSG_R7(x)      (((uint32_t)(x)) << 7)
 
 
@@ -259,7 +259,7 @@ status_t FlexCAN0_Init(CANFD_bitrate_profile_t profile, uint8_t irq_priority, vo
     CAN0->CAN0_FDCBT_b.FPRESDIV = timings.FPRESDIV;
     CAN0->CAN0_FDCBT_b.FPROPSEG = timings.FPROPSEG;
     CAN0->CAN0_FDCBT_b.FPSEG1   = timings.FPSEG1;
-    CAN0->CAN0_FDCBT_b.FPSEG2   = timings.FPSEG2;
+    CAN0->CAN0_FDCBT_b.FPSEG2   = timings.EPSEG2;
     CAN0->CAN0_FDCBT_b.FRJW     = timings.FRJW;
 
     CAN0->CAN0_FDCTRL_b.FDRATE = CAN0_FDCTRL_FDRATE_1;  	/* Enable bit rate switch in data phase of frame */
@@ -322,8 +322,8 @@ status_t FlexCAN0_Install_ID(uint32_t id, uint8_t mb_index)
     CAN0_MB->FD_MessageBuffer[mb_index].RTR =  0;			/* No remote request made */
 
     /* Configure the ID for receiving the message */
-    CAN0_MB->FD_MessageBuffer[mb_index].EXT_ID = (BIT_SRV_NOT_MSG(0) | BIT_R23(0) |
-                                                 (id << 8)          | BIT_MSG_R7(0)) & 0x1FFFFFFF;
+    CAN0_MB->FD_MessageBuffer[mb_index].EXT_ID = BIT_SRV_NOT_MSG(0) | BIT_R23(0) |
+    											 (id << 8)          | BIT_MSG_R7(0);
 
     /* Enable interrupt for reception in the specific message buffer */
     CAN0->CAN0_IMASK1 |= (1u << mb_index);
@@ -368,10 +368,10 @@ status_t FlexCAN0_Send(fdframe_t* frame)
     }
 
     /* Set the frame's destination ID */
-    CAN0_MB->FD_MessageBuffer[mb_index].EXT_ID = frame->EXTENDED_ID & 0x1FFFFFFF;
+    CAN0_MB->FD_MessageBuffer[mb_index].EXT_ID = frame->EXTENDED_ID;
 
     /* Set the transmission priority, per the spec, are the bits [28-26] of the id field */
-    CAN0_MB->FD_MessageBuffer[mb_index].PRIO = (frame->EXTENDED_ID >> 26) & 0x7;
+    CAN0_MB->FD_MessageBuffer[mb_index].PRIO = frame->EXTENDED_ID >> 26;
 
     /* Configure transmission message buffer. See "Message Buffer Structure" in RM */
     CAN0_MB->FD_MessageBuffer[mb_index].EDL =  1;			/* Extended data length */
