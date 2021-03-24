@@ -16,7 +16,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wsign-conversion -Wcast-align -Wmissing-dec
 
 # Forward the revision information to the compiler so that we could expose it at runtime. This is entirely optional.
 execute_process(
-        COMMAND git rev-parse --short=8 HEAD
+        COMMAND git rev-parse --short=16 HEAD
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_VARIABLE vcs_revision_id
         OUTPUT_STRIP_TRAILING_WHITESPACE
