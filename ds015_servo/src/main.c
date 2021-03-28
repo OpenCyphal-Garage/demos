@@ -862,6 +862,7 @@ int main(const int argc, char* const argv[])
 
     // Set up subject subscriptions and RPC-service servers.
     // Message subscriptions:
+    static const CanardMicrosecond servo_transfer_id_timeout = 100 * KILO;
     if (state.canard.node_id > CANARD_NODE_ID_MAX)
     {
         static CanardRxSubscription rx;
@@ -885,7 +886,7 @@ int main(const int argc, char* const argv[])
                               CanardTransferKindMessage,
                               state.port_id.sub.servo_setpoint,
                               reg_drone_physics_dynamics_translation_Linear_0_1_EXTENT_BYTES_,
-                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              servo_transfer_id_timeout,
                               &rx);
         if (res < 0)
         {
@@ -900,7 +901,7 @@ int main(const int argc, char* const argv[])
                               CanardTransferKindMessage,
                               state.port_id.sub.servo_readiness,
                               reg_drone_service_common_Readiness_0_1_EXTENT_BYTES_,
-                              CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
+                              servo_transfer_id_timeout,
                               &rx);
         if (res < 0)
         {
