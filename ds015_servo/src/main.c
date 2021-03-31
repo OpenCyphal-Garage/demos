@@ -508,7 +508,12 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
     {
         printf("Got PnP node-ID allocation: %d\n", msg->node_id.value);
         state->canard.node_id = (CanardNodeID) msg->node_id.value;
-        // Note that we don't save the dynamic node-ID into the register, it is intentional per the Spec.
+        // Store the value into the non-volatile storage.
+        uavcan_register_Value_1_0 reg = {0};
+        uavcan_register_Value_1_0_select_natural16_(&reg);
+        reg.natural16.value.elements[0] = msg->node_id.value;
+        reg.natural16.value.count = 1;
+        registerWrite("uavcan.node.id", &reg);
         // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
         (void) canardRxUnsubscribe(&state->canard,
                                    CanardTransferKindMessage,

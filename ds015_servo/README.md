@@ -101,12 +101,6 @@ yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.servo.power.
 yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.servo.status.id},    value: {natural16: {value: 103}}}"
 ```
 
-Also, set up a static node-ID (let's say, 77) to remove the dependency on the PnP node-ID allocator:
-
-```bash
-yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.node.id}, value: {natural16: {value: 77}}}"
-```
-
 The node is configured now, but we need to restart it before the configuration parameter changes take effect:
 
 ```bash
@@ -144,7 +138,7 @@ You can erase the configuration and go back to factory defaults as follows:
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
 export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
-yakut call 77 uavcan.node.ExecuteCommand.1.1 "command: 65532"
+yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
 ```
 
 
