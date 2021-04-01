@@ -170,7 +170,7 @@ You may (or may not) find something relevant for your target platform there, too
 
 ### Platform Build
 
-> **TODO** This is a work in progress but we have stubbed out a version of this demo that will run on the NXP S32K142 MCU. This section shows you how to build for
+> **TODO** This is a work in progress but we have stubbed out a version of this demo that will run on the NXP [NXP UCANS32K146](https://www.nxp.com/design/development-boards/automotive-development-platforms/s32k-mcu-platforms/can-fd-development-system-for-drones-rovers-and-mobile-robotics:UCANS32K146) MCU. This section shows you how to build for
 that platform. By default the build and the proceeding instructions are all for
 a generic linux platform.
 
@@ -186,7 +186,7 @@ project:
 ```
 mkdir build
 cd build
-cmake -DDS015_SERVO_DEMO_PLATFORM=s32k142 ..
+cmake -DDS015_SERVO_DEMO_PLATFORM=s32k146 ..
 make help
 ```
 

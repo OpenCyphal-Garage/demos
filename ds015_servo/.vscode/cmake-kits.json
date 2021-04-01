@@ -1,8 +1,8 @@
 [
     {
-        "name": "s32k142",
+        "name": "s32k146",
         "cmakeSettings": {
-            "DS015_SERVO_DEMO_PLATFORM": "s32k142"
+            "DS015_SERVO_DEMO_PLATFORM": "s32k146"
         }
     },
     {

@@ -16,7 +16,7 @@ else()
 endif()
 
 
-project(ds015_servo_demo C CXX)
+project(ds015_servo_demo C CXX ASM)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
@@ -93,7 +93,13 @@ file(GLOB LOCAL_PLATFORM_LAYER_SOURCE
      platform/${DS015_SERVO_DEMO_PLATFORM}/src/*.c
 )
 
-add_library(platform STATIC ${LOCAL_PLATFORM_LAYER_SOURCE})
+file(GLOB LOCAL_PLATFORM_LAYER_ASM
+     LIST_DIRECTORIES false
+     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+     platform/${DS015_SERVO_DEMO_PLATFORM}/src/*.S
+)
+
+add_library(platform STATIC ${LOCAL_PLATFORM_LAYER_SOURCE} ${LOCAL_PLATFORM_LAYER_ASM})
 include_directories(SYSTEM platform/${DS015_SERVO_DEMO_PLATFORM}/include/
                            platform/)
 
