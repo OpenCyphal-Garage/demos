@@ -11,7 +11,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 string(CONCAT LOCAL_TOOLCHAIN_GEN_ARGS  "-ggdb "
                                         "-O0 "
-                                        "-mcpu=cortex-m7 "
+                                        "-mcpu=cortex-m4 "
                                         "-march=armv7e-m+fp "
                                         "-mfloat-abi=hard "
                                         "-mthumb "

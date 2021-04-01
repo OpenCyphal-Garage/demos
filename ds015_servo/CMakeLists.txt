@@ -16,7 +16,7 @@ else()
 endif()
 
 
-project(ds015_servo_demo C CXX)
+project(ds015_servo_demo C CXX ASM)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
