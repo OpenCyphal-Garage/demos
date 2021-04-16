@@ -144,6 +144,7 @@
       <w>pathlib</w>
       <w>pcap</w>
       <w>pcapy</w>
+      <w>perfcounters</w>
       <w>pfft</w>
       <w>pizdec</w>
       <w>pizdets</w>
