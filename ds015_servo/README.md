@@ -141,6 +141,19 @@ export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
 yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
 ```
 
+If you have a joystick or a MIDI controller,
+you can control the servo interactively using `yakut publish` as shown in this video:
+
+[![using joystick](https://img.youtube.com/vi/wTuWtrrI1m0/maxresdefault.jpg)](https://www.youtube.com/watch?v=wTuWtrrI1m0)
+
+The corresponding command is (adjust the axes/buttons as necessary):
+
+```bash
+yakut pub --period=0.1 \
+    10:reg.drone.service.common.Readiness.0.1 'value: !$ "3 if T(1,3) else 0"' \
+    50:reg.drone.physics.dynamics.translation.Linear.0.1 'kinematics: {velocity: {meter_per_second: !$ "A(1,4)*10"}}'
+```
+
 
 ## Porting
 
