@@ -8,6 +8,7 @@
 #define TIMER_LPIT_H_
 
 #include <stdint.h>
+#include "monotonic_time.h"
 
 #ifdef __cplusplus
 extern "C" {

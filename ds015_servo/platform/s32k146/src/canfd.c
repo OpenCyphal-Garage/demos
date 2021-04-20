@@ -10,16 +10,16 @@
 
 /*!
 * @brief Bit field declaration for the transmission and reception message buffers. See "Message Buffer Structure" in RM.
-* 		 NOTE: Since this example manages CAN FD (8 bytes for header and 64 bytes for payload)
-* 		 you have 7 Message Buffers available. The FIFO is not enabled.
+*          NOTE: Since this example manages CAN FD (8 bytes for header and 64 bytes for payload)
+*          you have 7 Message Buffers available. The FIFO is not enabled.
 */
 typedef struct
 {
     struct
-	{
-      __IOM uint32_t TIMESTAMP  : 16;		/* Note that if you add from "TIMESTAMP" to "PRIO" */
-      __IOM uint32_t DLC        : 4;			/* you get 64 bits = 8 bytes for header */
-      __IOM uint32_t RTR        : 1;			/* 16 + 4 + 1 + ... + 3 = 64 */
+    {
+      __IOM uint32_t TIMESTAMP  : 16;        /* Note that if you add from "TIMESTAMP" to "PRIO" */
+      __IOM uint32_t DLC        : 4;            /* you get 64 bits = 8 bytes for header */
+      __IOM uint32_t RTR        : 1;            /* 16 + 4 + 1 + ... + 3 = 64 */
       __IOM uint32_t IDE        : 1;
       __IOM uint32_t SRR        : 1;
              uint32_t            : 1;
@@ -30,14 +30,14 @@ typedef struct
       __IOM uint32_t EDL        : 1;
       __IOM uint32_t EXT_ID     : 29;
       __IOM uint32_t PRIO       : 3;
-      __IOM uint32_t payload[16];				/* 64 bytes (16 words) for payload */
-    } FD_MessageBuffer[7];						/* 7 MBs available */
+      __IOM uint32_t payload[16];                /* 64 bytes (16 words) for payload */
+    } FD_MessageBuffer[7];                        /* 7 MBs available */
 } CAN_MB_t;
 
 /*!
 * @brief Cast the structure above to the CAN0 memory area. You can go to the "S32K146_bitfields.h" file and see this memory area.
-* 		 The file is inside the project's include folder.
-* 		 CAN0_BASE + 0x80 is the specific address where the CAN0 MB structure is defined.
+*          The file is inside the project's include folder.
+*          CAN0_BASE + 0x80 is the specific address where the CAN0 MB structure is defined.
 */
 #define CAN0_MB ((CAN_MB_t*)(CAN0_BASE + 0x80))
 
@@ -77,109 +77,109 @@ const uint8_t FlexCANLengthToDLC[65] = {
 
 FlexCAN_bit_timings_t CANFD_bitrate_profile_LUT[CANFD_bitrate_profile_NUM] =
 {
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 0,
-		.EPSEG1 = 0,
-		.EPSEG2 = 0,
-		.ERJW = 0,
-		.FPRESDIV = 0,
-		.FPROPSEG = 0,
-		.FPSEG1 = 0,
-		.FPSEG2 = 0,
-		.FRJW = 0
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 0,
+        .EPSEG1 = 0,
+        .EPSEG2 = 0,
+        .ERJW = 0,
+        .FPRESDIV = 0,
+        .FPROPSEG = 0,
+        .FPSEG1 = 0,
+        .FPSEG2 = 0,
+        .FRJW = 0
+    }
 ,
-	{
-		.EPRESDIV = 0,
-		.EPROPSEG = 46,
-		.EPSEG1 = 18,
-		.EPSEG2 = 12,
-		.ERJW = 12,
-		.FPRESDIV = 0,
-		.FPROPSEG = 7,
-		.FPSEG1 = 6,
-		.FPSEG2 = 4,
-		.FRJW = 4
-	}
+    {
+        .EPRESDIV = 0,
+        .EPROPSEG = 46,
+        .EPSEG1 = 18,
+        .EPSEG2 = 12,
+        .ERJW = 12,
+        .FPRESDIV = 0,
+        .FPROPSEG = 7,
+        .FPSEG1 = 6,
+        .FPSEG2 = 4,
+        .FRJW = 4
+    }
 };
 
 static void (*FlexCAN0_reception_callback_ptr)(void) = 0;
@@ -218,24 +218,24 @@ static inline void S32_NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority)
 #endif
 
 #define BIT_SRV_NOT_MSG(x) (((uint32_t)(x)) << 25)
-#define BIT_R23(x)    	    (((uint32_t)(x)) << 23)
+#define BIT_R23(x)            (((uint32_t)(x)) << 23)
 #define BIT_MSG_R7(x)      (((uint32_t)(x)) << 7)
 
 
 status_t FlexCAN0_Init(CANFD_bitrate_profile_t profile, uint8_t irq_priority, void (*callback)())
 {
-	/* Look-up the timings profile */
-	FlexCAN_bit_timings_t timings = CANFD_bitrate_profile_LUT[profile];
+    /* Look-up the timings profile */
+    FlexCAN_bit_timings_t timings = CANFD_bitrate_profile_LUT[profile];
 
-	/* FlexCAN0 clock gating */
+    /* FlexCAN0 clock gating */
     PCC->PCC_FlexCAN0_b.CGC   = PCC_PCC_FlexCAN0_CGC_1;
 
     /* Set Normal RUN clock mode for feeding SYS_CLK @ 80 MHz to FlexCAN */
-    CAN0->CAN0_MCR_b.MDIS     = CAN0_MCR_MDIS_1;        	/* Disable FlexCAN module for clock source selection */
-    CAN0->CAN0_CTRL1_b.CLKSRC = CAN0_CTRL1_CLKSRC_1;    	/* Select SYS_CLK as source (80 MHz) */
-    CAN0->CAN0_MCR_b.MDIS     = CAN0_MCR_MDIS_0;        	/* Enable FlexCAN peripheral */
-    CAN0->CAN0_MCR_b.HALT     = CAN0_MCR_HALT_1;        	/* Request freeze mode entry */
-    CAN0->CAN0_MCR_b.FRZ      = CAN0_MCR_FRZ_1;			    /* Enter in freeze mode */
+    CAN0->CAN0_MCR_b.MDIS     = CAN0_MCR_MDIS_1;            /* Disable FlexCAN module for clock source selection */
+    CAN0->CAN0_CTRL1_b.CLKSRC = CAN0_CTRL1_CLKSRC_1;        /* Select SYS_CLK as source (80 MHz) */
+    CAN0->CAN0_MCR_b.MDIS     = CAN0_MCR_MDIS_0;            /* Enable FlexCAN peripheral */
+    CAN0->CAN0_MCR_b.HALT     = CAN0_MCR_HALT_1;            /* Request freeze mode entry */
+    CAN0->CAN0_MCR_b.FRZ      = CAN0_MCR_FRZ_1;                /* Enter in freeze mode */
 
     /* Block for freeze mode entry */
     while(!(CAN0->CAN0_MCR_b.FRZACK));
@@ -248,7 +248,7 @@ status_t FlexCAN0_Init(CANFD_bitrate_profile_t profile, uint8_t irq_priority, vo
     CAN0->CAN0_CTRL2_b.ISOCANFDEN = CAN0_CTRL2_ISOCANFDEN_1;
 
     /* CAN Bit Timing (CBT) configuration for a nominal phase of 1 Mbit/s with 80 time quantas, in accordance with Bosch 2012 specification, sample point at 83.75% */
-    CAN0->CAN0_CBT_b.BTF 	  = CAN0_CBT_BTF_1;
+    CAN0->CAN0_CBT_b.BTF       = CAN0_CBT_BTF_1;
     CAN0->CAN0_CBT_b.EPRESDIV = timings.EPRESDIV;
     CAN0->CAN0_CBT_b.EPROPSEG = timings.EPROPSEG;
     CAN0->CAN0_CBT_b.EPSEG1   = timings.EPSEG1;
@@ -262,13 +262,13 @@ status_t FlexCAN0_Init(CANFD_bitrate_profile_t profile, uint8_t irq_priority, vo
     CAN0->CAN0_FDCBT_b.FPSEG2   = timings.FPSEG2;
     CAN0->CAN0_FDCBT_b.FRJW     = timings.FRJW;
 
-    CAN0->CAN0_FDCTRL_b.FDRATE = CAN0_FDCTRL_FDRATE_1;  	/* Enable bit rate switch in data phase of frame */
-    CAN0->CAN0_FDCTRL_b.TDCEN  = CAN0_FDCTRL_TDCEN_1;   	/* Enable transceiver delay compensation */
-    CAN0->CAN0_FDCTRL_b.TDCOFF = 5;                     	/* Setup 5 cycles for data phase sampling delay */
-    CAN0->CAN0_FDCTRL_b.MBDSR0 = CAN0_FDCTRL_MBDSR0_11; 	/* Setup 64 bytes per message buffer (7 MB's) */
+    CAN0->CAN0_FDCTRL_b.FDRATE = CAN0_FDCTRL_FDRATE_1;      /* Enable bit rate switch in data phase of frame */
+    CAN0->CAN0_FDCTRL_b.TDCEN  = CAN0_FDCTRL_TDCEN_1;       /* Enable transceiver delay compensation */
+    CAN0->CAN0_FDCTRL_b.TDCOFF = 5;                         /* Setup 5 cycles for data phase sampling delay */
+    CAN0->CAN0_FDCTRL_b.MBDSR0 = CAN0_FDCTRL_MBDSR0_11;     /* Setup 64 bytes per message buffer (7 MB's) */
 
-    CAN0->CAN0_MCR_b.SRXDIS = CAN0_MCR_SRXDIS_1; 			/* Disable self-reception of frames if ID matches */
-    CAN0->CAN0_MCR_b.IRMQ   = CAN0_MCR_IRMQ_1;   			/* Enable individual message buffer ID masking */
+    CAN0->CAN0_MCR_b.SRXDIS = CAN0_MCR_SRXDIS_1;             /* Disable self-reception of frames if ID matches */
+    CAN0->CAN0_MCR_b.IRMQ   = CAN0_MCR_IRMQ_1;               /* Enable individual message buffer ID masking */
 
     /* Exit from freeze mode */
     CAN0->CAN0_MCR_b.HALT = CAN0_MCR_HALT_0;
@@ -280,12 +280,12 @@ status_t FlexCAN0_Init(CANFD_bitrate_profile_t profile, uint8_t irq_priority, vo
     /* Block for module ready flag */
     while(CAN0->CAN0_MCR_b.NOTRDY){};
 
-	/* Enable and set interrupt priority for the reception ISR */
-	S32_NVIC_EnableIRQ(CAN0_ORed_0_15_MB_IRQn );
-	S32_NVIC_SetPriority(CAN0_ORed_0_15_MB_IRQn , irq_priority);
+    /* Enable and set interrupt priority for the reception ISR */
+    S32_NVIC_EnableIRQ(CAN0_ORed_0_15_MB_IRQn );
+    S32_NVIC_SetPriority(CAN0_ORed_0_15_MB_IRQn , irq_priority);
 
     /* Install ISR callback */
-	FlexCAN0_reception_callback_ptr = callback;
+    FlexCAN0_reception_callback_ptr = callback;
 
     /* Success initialization */
     return SUCCESS;
@@ -310,16 +310,16 @@ status_t FlexCAN0_Install_ID(uint32_t id, uint8_t mb_index)
 
     /* Mask for receiving messages of the particular subject ID of UAVCAN, consult section 4.2.1 of spec */
     CAN0->CAN0_RXIMR[mb_index] = BIT_SRV_NOT_MSG(1) | BIT_R23(1) |
-    		                         (0x1FFF << 8)  | BIT_MSG_R7(1);
+                                     (0x1FFF << 8)  | BIT_MSG_R7(1);
 
     /* Configure reception message buffer. See "Message Buffer Structure" in RM */
-    CAN0_MB->FD_MessageBuffer[mb_index].EDL =  1;			/* Extended data length */
-    CAN0_MB->FD_MessageBuffer[mb_index].BRS =  1;			/* Bit-rate switch */
-    CAN0_MB->FD_MessageBuffer[mb_index].ESI =  0;			/* N/A */
-    CAN0_MB->FD_MessageBuffer[mb_index].CODE = 4;			/* When a frame is received successfully, this field is automatically updated to FULL */
-    CAN0_MB->FD_MessageBuffer[mb_index].SRR =  0;			/* N/A */
-    CAN0_MB->FD_MessageBuffer[mb_index].IDE =  1;			/* Extended ID */
-    CAN0_MB->FD_MessageBuffer[mb_index].RTR =  0;			/* No remote request made */
+    CAN0_MB->FD_MessageBuffer[mb_index].EDL =  1;            /* Extended data length */
+    CAN0_MB->FD_MessageBuffer[mb_index].BRS =  1;            /* Bit-rate switch */
+    CAN0_MB->FD_MessageBuffer[mb_index].ESI =  0;            /* N/A */
+    CAN0_MB->FD_MessageBuffer[mb_index].CODE = 4;            /* When a frame is received successfully, this field is automatically updated to FULL */
+    CAN0_MB->FD_MessageBuffer[mb_index].SRR =  0;            /* N/A */
+    CAN0_MB->FD_MessageBuffer[mb_index].IDE =  1;            /* Extended ID */
+    CAN0_MB->FD_MessageBuffer[mb_index].RTR =  0;            /* No remote request made */
 
     /* Configure the ID for receiving the message */
     CAN0_MB->FD_MessageBuffer[mb_index].EXT_ID = (BIT_SRV_NOT_MSG(0) | BIT_R23(0) |
@@ -343,20 +343,20 @@ status_t FlexCAN0_Install_ID(uint32_t id, uint8_t mb_index)
 }
 status_t FlexCAN0_Send(fdframe_t* frame)
 {
-	// Verify Inactive message buffer and Valid Priority Status flags
-	if( !(CAN0->CAN0_ESR2_b.IMB && CAN0->CAN0_ESR2_b.VPS) )
-	{
-		return FAILURE; // there are no available message buffers, priority inversion may have occurred
-	}
+    // Verify Inactive message buffer and Valid Priority Status flags
+    if( !(CAN0->CAN0_ESR2_b.IMB && CAN0->CAN0_ESR2_b.VPS) )
+    {
+        return FAILURE; // there are no available message buffers, priority inversion may have occurred
+    }
 
-	// Get the lowest number index available message buffer
-	uint8_t mb_index = CAN0->CAN0_ESR2_b.LPTM;
+    // Get the lowest number index available message buffer
+    uint8_t mb_index = CAN0->CAN0_ESR2_b.LPTM;
 
-	// Leverage 32-bit native transfers
-	uint32_t* native_FrameData = (uint32_t*)frame->PAYLOAD;
+    // Leverage 32-bit native transfers
+    uint32_t* native_FrameData = (uint32_t*)frame->PAYLOAD;
 
-	/* get the frame's payload_length */
-	uint32_t payloadLength = frame->PAYLOAD_SIZE_BYTES;
+    /* get the frame's payload_length */
+    uint32_t payloadLength = frame->PAYLOAD_SIZE_BYTES;
 
     /* Fill up the payload's bytes, including the ones that don't add up to a full word e.g. 1,2,3,5,6,7 byte data
      * length payloads */
@@ -364,7 +364,7 @@ status_t FlexCAN0_Send(fdframe_t* frame)
     {
         /* FlexCAN natively transmits the bytes in big-endian order, in order to transmit little-endian for UAVCAN,
          * a byte swap is required */
-    	S32_REV_BYTES(native_FrameData[i], CAN0_MB->FD_MessageBuffer[mb_index].payload[i]);
+        S32_REV_BYTES(native_FrameData[i], CAN0_MB->FD_MessageBuffer[mb_index].payload[i]);
     }
 
     /* Set the frame's destination ID */
@@ -374,16 +374,16 @@ status_t FlexCAN0_Send(fdframe_t* frame)
     CAN0_MB->FD_MessageBuffer[mb_index].PRIO = (frame->EXTENDED_ID >> 26) & 0x7;
 
     /* Configure transmission message buffer. See "Message Buffer Structure" in RM */
-    CAN0_MB->FD_MessageBuffer[mb_index].EDL =  1;			/* Extended data length */
-    CAN0_MB->FD_MessageBuffer[mb_index].BRS =  1;			/* Bit-rate switch */
-    CAN0_MB->FD_MessageBuffer[mb_index].ESI =  0;			/* N/A */
-    CAN0_MB->FD_MessageBuffer[mb_index].SRR =  0;			/* N/A */
-    CAN0_MB->FD_MessageBuffer[mb_index].IDE =  1;			/* Extended ID */
-    CAN0_MB->FD_MessageBuffer[mb_index].RTR =  0;			/* No remote request made */
-    CAN0_MB->FD_MessageBuffer[mb_index].DLC = 0xF;			/* 64 bytes of payload */
-    CAN0_MB->FD_MessageBuffer[mb_index].CODE = 0xC; 	    /* After TX, the MB automatically returns to the INACTIVE state */
+    CAN0_MB->FD_MessageBuffer[mb_index].EDL =  1;            /* Extended data length */
+    CAN0_MB->FD_MessageBuffer[mb_index].BRS =  1;            /* Bit-rate switch */
+    CAN0_MB->FD_MessageBuffer[mb_index].ESI =  0;            /* N/A */
+    CAN0_MB->FD_MessageBuffer[mb_index].SRR =  0;            /* N/A */
+    CAN0_MB->FD_MessageBuffer[mb_index].IDE =  1;            /* Extended ID */
+    CAN0_MB->FD_MessageBuffer[mb_index].RTR =  0;            /* No remote request made */
+    CAN0_MB->FD_MessageBuffer[mb_index].DLC = 0xF;            /* 64 bytes of payload */
+    CAN0_MB->FD_MessageBuffer[mb_index].CODE = 0xC;         /* After TX, the MB automatically returns to the INACTIVE state */
 
-	return SUCCESS;
+    return SUCCESS;
 }
 
 
@@ -394,17 +394,61 @@ extern "C" {
 
 void CAN0_ORed_0_15_MB_IRQHandler(void)
 {
-	// Perform the ISR atomically
-	S32_DISABLE_INTERRUPTS()
+    // Perform the ISR atomically
+    S32_DISABLE_INTERRUPTS()
 
-	// Execute callback
-	FlexCAN0_reception_callback_ptr();
+    // Execute callback
+    FlexCAN0_reception_callback_ptr();
 
-	S32_ENABLE_INTERRUPTS()
+    S32_ENABLE_INTERRUPTS()
 }
 
 
 #ifdef __cplusplus
 }
 #endif
+
+
+// +--------------------------------------------------------------------------+
+// | TODO: Implement this driver in terms of socketcan.h
+// +--------------------------------------------------------------------------+
+
+SocketCANFD socketcanOpen(const char* const iface_name, const bool can_fd)
+{
+    (void)iface_name;
+    (void)can_fd;
+    return 0;
+}
+
+int16_t socketcanPush(const SocketCANFD fd, const CanardFrame* const frame, const CanardMicrosecond timeout_usec)
+{
+    (void)fd;
+    (void)frame;
+    (void)timeout_usec;
+    return 0;
+}
+
+int16_t socketcanPop(const SocketCANFD       fd,
+                     CanardFrame* const      out_frame,
+                     const size_t            payload_buffer_size,
+                     void* const             payload_buffer,
+                     const CanardMicrosecond timeout_usec,
+                     bool* const             loopback)
+{
+    (void)fd;
+    (void)out_frame;
+    (void)payload_buffer_size;
+    (void)payload_buffer;
+    (void)timeout_usec;
+    (void)loopback;
+    return 0;
+}
+
+int16_t socketcanFilter(const SocketCANFD fd, const size_t num_configs, const SocketCANFilterConfig* const configs)
+{
+    (void)fd;
+    (void)num_configs;
+    (void)configs;
+    return 0;
+}
 

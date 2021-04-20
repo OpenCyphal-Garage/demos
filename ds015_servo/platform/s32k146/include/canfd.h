@@ -7,7 +7,7 @@
 #ifndef MEDIA_CANFD_H_
 #define MEDIA_CANFD_H_
 
-
+#include "socketcan.h"
 #include <stdint.h>
 #include <stddef.h>
 

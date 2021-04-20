@@ -15,6 +15,7 @@
 /// Author: Pavel Kirienko <pavel@uavcan.org>
 
 #include "canard.h"
+#include "platform.h"
 #include "socketcan.h"
 #include "register.h"
 #include "monotonic_time.h"
@@ -768,17 +769,7 @@ int main(const int argc, char* const argv[])
 {
     State state = {0};
 
-    // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.
-    // For the background and related theory refer to the following resources:
-    // - https://github.com/UAVCAN/libcanard/blob/master/README.md
-    // - https://github.com/pavel-kirienko/o1heap/blob/master/README.md
-    // - https://forum.uavcan.org/t/uavcanv1-libcanard-nunavut-templates-memory-usage-concerns/1118/4?u=pavel.kirienko
-    _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 16] = {0};
-
-    // If you are using an RTOS or another multithreaded environment, pass critical section enter/leave functions
-    // in the last two arguments instead of NULL.
-    state.heap = o1heapInit(heap_arena, sizeof(heap_arena), NULL, NULL);
-    if (state.heap == NULL)
+    if(0 != init_platform(&state.heap))
     {
         return 1;
     }
@@ -966,6 +957,7 @@ int main(const int argc, char* const argv[])
     CanardMicrosecond       next_01_hz_iter_at                  = state.started_at + MEGA * 10;
     do
     {
+        heartbeat();
         // Run a trivial scheduler polling the loops that run the business logic.
         CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
         if (monotonic_time >= next_fast_iter_at)
