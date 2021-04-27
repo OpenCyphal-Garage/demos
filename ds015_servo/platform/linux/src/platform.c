@@ -12,7 +12,7 @@
 _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 16] = {0};
 
 
-int init_platform(O1HeapInstance** out_allocator)
+int platformInit(O1HeapInstance** out_allocator)
 {
     int result = 0;
     if (out_allocator)
@@ -29,7 +29,7 @@ int init_platform(O1HeapInstance** out_allocator)
     return result;
 }
 
-void service(void)
+void platformService(void)
 {
     // Linux is boring. We don't do anything here.
 }

@@ -769,7 +769,7 @@ int main(const int argc, char* const argv[])
 {
     State state = {0};
 
-    if(0 != init_platform(&state.heap))
+    if(0 != platformInit(&state.heap))
     {
         return 1;
     }
@@ -957,7 +957,7 @@ int main(const int argc, char* const argv[])
     CanardMicrosecond       next_01_hz_iter_at                  = state.started_at + MEGA * 10;
     do
     {
-        heartbeat();
+        platformService();
         // Run a trivial scheduler polling the loops that run the business logic.
         CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
         if (monotonic_time >= next_fast_iter_at)

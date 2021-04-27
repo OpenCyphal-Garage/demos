@@ -20,8 +20,8 @@
 
 /// Initialize the platform layer and return a heap allocator.
 /// Returns 0 on success or non-zero on error
-int init_platform(O1HeapInstance** out_allocator);
+int platformInit(O1HeapInstance** out_allocator);
 
 /// Call a 1Hz to give the platform layer some time for things like
 /// kicking watchdog timers.
-void heartbeat(void);
+void platformService(void);

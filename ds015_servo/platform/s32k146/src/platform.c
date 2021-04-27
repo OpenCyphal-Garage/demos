@@ -26,8 +26,8 @@
 #define FLEXCAN_RX_IRQ_PRIO        (1u)
 
 // Linker file symbols for o1heap allcator
-void* __HeapBasee = (void*)0x200000a0;
-size_t HEAP_SIZEe = 0x8000;
+void* __HeapBase = (void*)0x200000a0;
+size_t HEAP_SIZE = 0x8000;
 
 // Application-specific function prototypes
 void FlexCAN0_reception_callback(void);
@@ -36,14 +36,14 @@ void UCANS32K146_PIN_MUX();
 void greenLED_init(void);
 void greenLED_toggle(void);
 
-int init_platform(O1HeapInstance** out_allocator)
+int platformInit(O1HeapInstance** out_allocator)
 {
     int result = 0;
 
     // Initialization of o1heap allocator if requested.
     if (out_allocator)
     {
-        O1HeapInstance* inst = o1heapInit(__HeapBasee, HEAP_SIZEe, NULL, NULL);
+        O1HeapInstance* inst = o1heapInit(__HeapBase, HEAP_SIZE, NULL, NULL);
         if(inst == NULL)
         {
             result = 1;
@@ -72,7 +72,7 @@ int init_platform(O1HeapInstance** out_allocator)
     return result;
 }
 
-void heartbeat(void)
+void platformService(void)
 {
     // Toggle LED at 1Hz
     greenLED_toggle();
