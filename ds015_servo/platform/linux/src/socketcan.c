@@ -259,7 +259,7 @@ int16_t socketcanPop(const SocketCANFD       fd,
         }
 
         (void) memset(out_frame, 0, sizeof(CanardFrame));
-        out_frame->timestamp_usec  = (CanardMicrosecond)(((uint64_t) tv.tv_sec * MEGA) + (uint64_t) tv.tv_usec);
+        out_frame->timestamp_usec  = (CanardMicrosecond) (((uint64_t) tv.tv_sec * MEGA) + (uint64_t) tv.tv_usec);
         out_frame->extended_can_id = sockcan_frame.can_id & CAN_EFF_MASK;
         out_frame->payload_size    = sockcan_frame.len;
         out_frame->payload         = payload_buffer;
@@ -287,7 +287,7 @@ int16_t socketcanFilter(const SocketCANFD fd, const size_t num_configs, const So
     }
 
     const int ret =
-        setsockopt(fd, SOL_CAN_RAW, CAN_RAW_FILTER, cfs, (socklen_t)(sizeof(struct can_filter) * num_configs));
+        setsockopt(fd, SOL_CAN_RAW, CAN_RAW_FILTER, cfs, (socklen_t) (sizeof(struct can_filter) * num_configs));
 
     return (ret < 0) ? getNegatedErrno() : 0;
 }

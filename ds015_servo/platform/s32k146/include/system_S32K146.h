@@ -25,7 +25,6 @@
 ** ###################################################################
 */
 
-
 /*! @addtogroup soc_support_S32K146*/
 /*! @{*/
 
@@ -39,7 +38,7 @@
  */
 
 #ifndef SYSTEM_S32K146_H_
-#define SYSTEM_S32K146_H_                        /**< Symbol preventing repeated inclusion */
+#define SYSTEM_S32K146_H_ /**< Symbol preventing repeated inclusion */
 
 #include <stdint.h>
 
@@ -53,27 +52,27 @@ extern "C" {
 
 /* Watchdog disable */
 #ifndef DISABLE_WDOG
-  #define DISABLE_WDOG                 1
+#    define DISABLE_WDOG 1
 #endif
 
 /* Cache enablement  */
 #ifndef ICACHE_ENABLE
-#define ICACHE_ENABLE                  0
+#    define ICACHE_ENABLE 0
 #endif
 
 /* Value of the external crystal or oscillator clock frequency in Hz */
 #ifndef CPU_XTAL_CLK_HZ
-  #define CPU_XTAL_CLK_HZ                8000000u
+#    define CPU_XTAL_CLK_HZ 8000000u
 #endif
 
 /* Value of the fast internal oscillator clock frequency in Hz  */
 #ifndef CPU_INT_FAST_CLK_HZ
-  #define CPU_INT_FAST_CLK_HZ            48000000u
+#    define CPU_INT_FAST_CLK_HZ 48000000u
 #endif
 
 /* Default System clock value */
 #ifndef DEFAULT_SYSTEM_CLOCK
- #define DEFAULT_SYSTEM_CLOCK            48000000u
+#    define DEFAULT_SYSTEM_CLOCK 48000000u
 #endif
 
 /**
@@ -121,4 +120,4 @@ void SystemSoftwareReset(void);
 #endif
 
 /*! @}*/
-#endif  /* #if !defined(SYSTEM_S32K146_H_) */
+#endif /* #if !defined(SYSTEM_S32K146_H_) */

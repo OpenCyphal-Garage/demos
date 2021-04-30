@@ -7,7 +7,6 @@
 #include "SCG.h"
 #include "S32K146_bitfields.h"
 
-
 void SCG_SOSC_8MHz_Init(void)
 {
     /* System Oscillator (SOSC) initialization for 8 MHz external crystal */
@@ -20,7 +19,8 @@ void SCG_SOSC_8MHz_Init(void)
     SCG->SCG_SOSCCSR_b.LK       = SCG_SOSCCSR_LK_1;         /* Lock the register from accidental writes */
 
     /* Poll for valid SOSC reference, needs 4096 cycles */
-    while(!(SCG->SCG_SOSCCSR_b.SOSCVLD));
+    while (!(SCG->SCG_SOSCCSR_b.SOSCVLD))
+        ;
 
     return;
 }
@@ -36,7 +36,8 @@ void SCG_SPLL_160MHz_Init(void)
     SCG->SCG_SPLLCSR_b.LK       = SCG_SPLLCSR_LK_1;         /* Lock register */
 
     /* Poll for valid SPLL reference */
-    while(!(SCG->SCG_SPLLCSR_b.SPLLVLD));
+    while (!(SCG->SCG_SPLLCSR_b.SPLLVLD))
+        ;
 
     return;
 }

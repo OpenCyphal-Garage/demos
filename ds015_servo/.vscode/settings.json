@@ -2,7 +2,9 @@
     "files.associations": {
         "socketcan.h": "c",
         "monotonic_time.h": "c",
-        "register.h": "c"
+        "register.h": "c",
+        "canfd.h": "c",
+        "functional": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.exclude": {

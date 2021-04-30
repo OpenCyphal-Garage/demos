@@ -15,6 +15,7 @@
 /// Author: Pavel Kirienko <pavel@uavcan.org>
 
 #include "canard.h"
+#include "platform.h"
 #include "socketcan.h"
 #include "register.h"
 #include "monotonic_time.h"
@@ -292,7 +293,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
     if (!anonymous)
     {
         uavcan_node_Heartbeat_1_0 heartbeat = {0};
-        heartbeat.uptime                    = (uint32_t)((monotonic_time - state->started_at) / MEGA);
+        heartbeat.uptime                    = (uint32_t) ((monotonic_time - state->started_at) / MEGA);
         heartbeat.mode.value                = uavcan_node_Mode_1_0_OPERATIONAL;
         const O1HeapDiagnostics heap_diag   = o1heapGetDiagnostics(state->heap);
         if (heap_diag.oom_count > 0)
@@ -316,7 +317,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_heartbeat++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_heartbeat++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -348,7 +349,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                     .transfer_kind  = CanardTransferKindMessage,
                     .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                     .remote_node_id = CANARD_NODE_ID_UNSET,
-                    .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_pnp_allocation++),
+                    .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_pnp_allocation++),
                     .payload_size   = serialized_size,
                     .payload        = &serialized[0],
                 };
@@ -387,7 +388,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
 
     // Disarm automatically if the arming subject has not been updated in a while.
     if (state->servo.arming.armed && ((monotonic_time - state->servo.arming.last_update_at) >
-                                      (uint64_t)(reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
+                                      (uint64_t) (reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
     {
         state->servo.arming.armed = false;
         puts("Disarmed by timeout ");
@@ -456,7 +457,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_port_List_0_1_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_port_list++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_port_list++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -497,7 +498,7 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
         uavcan_register_Value_1_0 reg = {0};
         uavcan_register_Value_1_0_select_natural16_(&reg);
         reg.natural16.value.elements[0] = msg->node_id.value;
-        reg.natural16.value.count = 1;
+        reg.natural16.value.count       = 1;
         registerWrite("uavcan.node.id", &reg);
         // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
         (void) canardRxUnsubscribe(&state->canard,
@@ -768,17 +769,7 @@ int main(const int argc, char* const argv[])
 {
     State state = {0};
 
-    // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.
-    // For the background and related theory refer to the following resources:
-    // - https://github.com/UAVCAN/libcanard/blob/master/README.md
-    // - https://github.com/pavel-kirienko/o1heap/blob/master/README.md
-    // - https://forum.uavcan.org/t/uavcanv1-libcanard-nunavut-templates-memory-usage-concerns/1118/4?u=pavel.kirienko
-    _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 16] = {0};
-
-    // If you are using an RTOS or another multithreaded environment, pass critical section enter/leave functions
-    // in the last two arguments instead of NULL.
-    state.heap = o1heapInit(heap_arena, sizeof(heap_arena), NULL, NULL);
-    if (state.heap == NULL)
+    if (0 != platformInit(&state.heap))
     {
         return 1;
     }
@@ -966,6 +957,7 @@ int main(const int argc, char* const argv[])
     CanardMicrosecond       next_01_hz_iter_at                  = state.started_at + MEGA * 10;
     do
     {
+        platformService();
         // Run a trivial scheduler polling the loops that run the business logic.
         CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
         if (monotonic_time >= next_fast_iter_at)
