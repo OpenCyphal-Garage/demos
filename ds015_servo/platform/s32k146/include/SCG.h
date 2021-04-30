@@ -13,9 +13,9 @@ extern "C" {
 
 #include <stdint.h>
 
-void SCG_SOSC_8MHz_Init		(void);
-void SCG_SPLL_160MHz_Init	(void);
-void SCG_Normal_RUN_Init	(void);
+void SCG_SOSC_8MHz_Init(void);
+void SCG_SPLL_160MHz_Init(void);
+void SCG_Normal_RUN_Init(void);
 
 #ifdef __cplusplus
 }

@@ -6,8 +6,8 @@
 ///                            |      |            |         |      |         |
 ///                        ----o------o------------o---------o------o---------o-------
 ///
-/// Provides monotonic time from the platform. This is needed to support the demo firmware and to provide monotonic time for the
-/// required UAVCAN Heartbeat message
+/// Provides monotonic time from the platform. This is needed to support the demo firmware and to provide monotonic time
+/// for the required UAVCAN Heartbeat message
 ///
 /// This software is distributed under the terms of the MIT License.
 /// Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
@@ -26,4 +26,4 @@
 /// it may change rate or make leap adjustments. The two kinds of time serve completely different purposes.
 CanardMicrosecond getMonotonicMicroseconds();
 
-#endif // MONOTONIC_TIME_H_INCLUDED
+#endif  // MONOTONIC_TIME_H_INCLUDED

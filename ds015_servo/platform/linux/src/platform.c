@@ -3,14 +3,12 @@
 
 #include "platform.h"
 
-
 // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.
 // For the background and related theory refer to the following resources:
 // - https://github.com/UAVCAN/libcanard/blob/master/README.md
 // - https://github.com/pavel-kirienko/o1heap/blob/master/README.md
 // - https://forum.uavcan.org/t/uavcanv1-libcanard-nunavut-templates-memory-usage-concerns/1118/4?u=pavel.kirienko
 _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 16] = {0};
-
 
 int platformInit(O1HeapInstance** out_allocator)
 {

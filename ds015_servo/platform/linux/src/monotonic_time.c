@@ -13,5 +13,5 @@ CanardMicrosecond getMonotonicMicroseconds()
     {
         abort();
     }
-    return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
+    return (uint64_t) (ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
 }

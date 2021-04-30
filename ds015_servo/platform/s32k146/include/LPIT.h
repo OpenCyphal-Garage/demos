@@ -14,7 +14,6 @@
 extern "C" {
 #endif
 
-
 // Initializes a 64-bit time-stamping monotonic timer using 2 LPIT0 channels, 0 and 1 in chain mode
 void LPIT0_Timestamping_Timer_Init(void);
 
@@ -29,5 +28,3 @@ extern void LPIT0_Ch2_IRQHandler(void);
 #endif
 
 #endif /* TIMER_LPIT_H_ */
-
-

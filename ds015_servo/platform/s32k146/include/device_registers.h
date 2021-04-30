@@ -25,17 +25,16 @@
 */
 
 #ifndef DEVICE_REGISTERS_H
-#define DEVICE_REGISTERS_H
+#    define DEVICE_REGISTERS_H
 
 /**
-* @page misra_violations MISRA-C:2012 violations
-*
-* @section [global]
-* Violates MISRA 2012 Advisory Rule 2.5, global macro not referenced.
-* The macro defines the device currently in use and may be used by components for specific checks.
-*
-*/
-
+ * @page misra_violations MISRA-C:2012 violations
+ *
+ * @section [global]
+ * Violates MISRA 2012 Advisory Rule 2.5, global macro not referenced.
+ * The macro defines the device currently in use and may be used by components for specific checks.
+ *
+ */
 
 /*
  * Include the cpu specific register header files.
@@ -43,29 +42,29 @@
  * The CPU macro should be declared in the project or makefile.
  */
 
-#if defined(CPU_S32K146)
+#    if defined(CPU_S32K146)
 
-    #define S32K14x_SERIES
+#        define S32K14x_SERIES
 
-    /* Specific core definitions */
-    #include "s32_core_cm4.h"
-	
-    #if defined(CPU_S32K146)
+/* Specific core definitions */
+#        include "s32_core_cm4.h"
 
-        #define S32K146_SERIES
+#        if defined(CPU_S32K146)
 
-        /* Register definitions */
-        #include "S32K146.h"
-        /* CPU specific feature definitions */
-        #include "S32K146_features.h"
-		
-     #endif
+#            define S32K146_SERIES
 
-#else
-    #error "No valid CPU defined!"
-#endif
+/* Register definitions */
+#            include "S32K146.h"
+/* CPU specific feature definitions */
+#            include "S32K146_features.h"
 
-#include "devassert.h"
+#        endif
+
+#    else
+#        error "No valid CPU defined!"
+#    endif
+
+#    include "devassert.h"
 
 #endif /* DEVICE_REGISTERS_H */
 
