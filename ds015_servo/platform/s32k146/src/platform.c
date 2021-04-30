@@ -22,12 +22,12 @@
 #include "platform.h"
 
 #define FRAME_UNLOAD_PERIOD_MILI (500u)
-#define FRAME_UNLOAD_IRQ_PRIO      (2u)
-#define FLEXCAN_RX_IRQ_PRIO        (1u)
+#define FRAME_UNLOAD_IRQ_PRIO (2u)
+#define FLEXCAN_RX_IRQ_PRIO (1u)
 
 // Linker file symbols for o1heap allcator
-void* __HeapBase = (void*)0x200000a0;
-size_t HEAP_SIZE = 0x8000;
+void*  __HeapBase = (void*) 0x200000a0;
+size_t HEAP_SIZE  = 0x8000;
 
 // Application-specific function prototypes
 void FlexCAN0_reception_callback(void);
@@ -44,7 +44,7 @@ int platformInit(O1HeapInstance** out_allocator)
     if (out_allocator)
     {
         O1HeapInstance* inst = o1heapInit(__HeapBase, HEAP_SIZE, NULL, NULL);
-        if(inst == NULL)
+        if (inst == NULL)
         {
             result = 1;
         }
@@ -85,24 +85,29 @@ void FlexCAN0_reception_callback(void)
 
 void abort(void)
 {
-    while(1){}
+    // Enter the default exception handler for the MCU.
+    ((void (*)(void)) NULL)();
+    // This is to appease static analysis. You shouldn't ever
+    // get here on-targer.
+    while (1)
+    {}
 }
 
 void UCANS32K146_PIN_MUX(void)
 {
     /* Multiplex FlexCAN0 pins */
-    PCC->PCC_PORTE_b.CGC = PCC_PCC_PORTE_CGC_1;   /* Clock gating to PORT E */
-    PORTE->PORTE_PCR4_b.MUX = PORTE_PCR4_MUX_101; /* CAN0_RX at PORT E pin 4 */
-    PORTE->PORTE_PCR5_b.MUX = PORTE_PCR5_MUX_101; /* CAN0_TX at PORT E pin 5 */
+    PCC->PCC_PORTE_b.CGC    = PCC_PCC_PORTE_CGC_1; /* Clock gating to PORT E */
+    PORTE->PORTE_PCR4_b.MUX = PORTE_PCR4_MUX_101;  /* CAN0_RX at PORT E pin 4 */
+    PORTE->PORTE_PCR5_b.MUX = PORTE_PCR5_MUX_101;  /* CAN0_TX at PORT E pin 5 */
 
-    PCC->PCC_PORTA_b.CGC = PCC_PCC_PORTA_CGC_1;   /* Clock gating to PORT A */
+    PCC->PCC_PORTA_b.CGC     = PCC_PCC_PORTA_CGC_1; /* Clock gating to PORT A */
     PORTA->PORTA_PCR12_b.MUX = PORTA_PCR12_MUX_011; /* CAN1_RX at PORT A pin 12 */
     PORTA->PORTA_PCR13_b.MUX = PORTA_PCR13_MUX_011; /* CAN1_TX at PORT A pin 13 */
 
     /* Set to LOW the standby (STB) pin in both transceivers of the UCANS32K146 node board */
     PORTE->PORTE_PCR11_b.MUX = PORTE_PCR11_MUX_001; /* MUX to GPIO */
-    PTE->GPIOE_PDDR |= 1 << 11;                   /* Set direction as output */
-    PTE->GPIOE_PCOR |= 1 << 11;                   /* Set the pin LOW */
+    PTE->GPIOE_PDDR |= 1 << 11;                     /* Set direction as output */
+    PTE->GPIOE_PCOR |= 1 << 11;                     /* Set the pin LOW */
 
     PORTE->PORTE_PCR10_b.MUX = PORTE_PCR10_MUX_001; /* Same as above */
     PTE->GPIOE_PDDR |= 1 << 10;
@@ -111,13 +116,12 @@ void UCANS32K146_PIN_MUX(void)
 
 void greenLED_init(void)
 {
-    PCC->PCC_PORTD_b.CGC = PCC_PCC_PORTD_CGC_1;     /* Enable clock for PORTD */
+    PCC->PCC_PORTD_b.CGC     = PCC_PCC_PORTD_CGC_1; /* Enable clock for PORTD */
     PORTD->PORTD_PCR16_b.MUX = PORTE_PCR16_MUX_001; /* Port D16: MUX = GPIO */
-    PTD->GPIOD_PDDR |= 1<<16;                       /* Port D16: Data direction = output  */
-
+    PTD->GPIOD_PDDR |= 1 << 16;                     /* Port D16: Data direction = output  */
 }
 
 void greenLED_toggle(void)
 {
-    PTD->GPIOD_PTOR |= 1<<16;
+    PTD->GPIOD_PTOR |= 1 << 16;
 }

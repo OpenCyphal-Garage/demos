@@ -157,4 +157,6 @@ else()
                         "Generting binary file from ${CMAKE_PROJECT_NAME}.elf"
     )
 
+    add_dependencies(${CMAKE_PROJECT_NAME}.bin ${CMAKE_PROJECT_NAME}.elf)
+
 endif()
