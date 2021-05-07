@@ -462,7 +462,7 @@ static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
     resp.protocol_version.minor           = CANARD_UAVCAN_SPECIFICATION_VERSION_MINOR;
 
     // The hardware version is not populated in this demo because it runs on no specific hardware.
-    // An embedded node like a servo would usually determine the version by querying the hardware.
+    // An embedded node would usually determine the version by querying the hardware.
 
     resp.software_version.major   = VERSION_MAJOR;
     resp.software_version.minor   = VERSION_MINOR;
@@ -609,7 +609,7 @@ int main(const int argc, char* const argv[])
 {
     State state = {0};
 
-    // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.
+    // A simple node like this one typically does not require more than 4 KiB of heap and 4 KiB of stack.
     // For the background and related theory refer to the following resources:
     // - https://github.com/UAVCAN/libcanard/blob/master/README.md
     // - https://github.com/pavel-kirienko/o1heap/blob/master/README.md
@@ -660,10 +660,7 @@ int main(const int argc, char* const argv[])
         return -sock;
     }
 
-    // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired. Specification here:
-    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
-    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/README.md
-    // As follows from the Specification, the register group name prefix can be arbitrary; here we just use "servo".
+    // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired.
     // Publications:
     state.port_id.pub.differential_pressure =
         getPublisherSubjectID("differential_pressure", uavcan_si_unit_temperature_Scalar_1_0_FULL_NAME_AND_VERSION_);
