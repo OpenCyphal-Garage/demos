@@ -154,7 +154,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     if (!anonymous && (state->port_id.pub.differential_pressure <= CANARD_SUBJECT_ID_MAX))
     {
         uavcan_si_unit_pressure_Scalar_1_0 msg = {0};
-        msg.pascal                             = (float) rand() * 100.0F;  // TODO: sample data from the real sensor.
+        msg.pascal                             = (float) rand() * 0.1F;  // TODO: sample data from the real sensor.
         // Serialize and publish the message:
         uint8_t      serialized[uavcan_si_unit_pressure_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t       serialized_size = sizeof(serialized);
@@ -254,7 +254,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
     if (!anonymous && state->port_id.pub.static_air_temperature <= CANARD_SUBJECT_ID_MAX)
     {
         uavcan_si_unit_temperature_Scalar_1_0 msg = {0};
-        msg.kelvin                                = (float) rand() * 400.0F;  // TODO: sample data from the real sensor.
+        msg.kelvin                                = (float) rand() * 0.01F;  // TODO: sample data from the real sensor.
         // Serialize and publish the message:
         uint8_t      serialized[uavcan_si_unit_temperature_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t       serialized_size = sizeof(serialized);

@@ -70,7 +70,46 @@ This command will run the monitor together with the allocator.
 You will see our node get itself a node-ID allocated,
 then roughly the following picture should appear on the monitor:
 
-**TODO**
+<img src="docs/monitor-initial.png" alt="yakut monitor">
+
+That means that our node is running, but it is unable to publish measurements because the respective subjects
+remain unconfigured.
+Configure them (do not stop the monitor though, otherwise you won't know what's happening on the bus),
+assuming that the node got allocated the node-ID of 125:
+
+```bash
+export UAVCAN__CAN__IFACE="socketcan:vcan0"
+export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
+yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.differential_pressure.id},  value: {natural16: {value: 100}}}"
+yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.static_air_temperature.id}, value: {natural16: {value: 101}}}"
+```
+
+The node is configured now, but we need to restart it before the configuration parameter changes take effect:
+
+```bash
+yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65535"
+```
+
+You should see candump start printing a lot more frames (approx. 150 per second),
+because the demo is now publishing the sensor data.
+The monitor will also show the subjects that we just configured.
+
+<img src="docs/monitor.png" alt="yakut monitor">
+
+You can subscribe to the published differential pressure using Yakut as follows:
+
+```bash
+export UAVCAN__CAN__IFACE="socketcan:vcan0"
+yakut sub 100:uavcan.si.unit.pressure.Scalar.1.0
+```
+
+You can erase the configuration and go back to factory defaults as follows:
+
+```bash
+export UAVCAN__CAN__IFACE="socketcan:vcan0"
+export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
+yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
+```
 
 
 ## Porting
