@@ -90,8 +90,7 @@ The node is configured now, but we need to restart it before the configuration p
 yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65535"
 ```
 
-You should see candump start printing a lot more frames (approx. 150 per second),
-because the demo is now publishing the sensor data.
+You should see candump start printing a lot more frames because the demo is now publishing the sensor data.
 The monitor will also show the subjects that we just configured.
 
 <img src="docs/monitor.png" alt="yakut monitor">
