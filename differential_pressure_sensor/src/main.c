@@ -645,6 +645,13 @@ int main(const int argc, char* const argv[])
     val._string.value.count = 0;
     registerRead("uavcan.node.description", &val);  // We don't need the value, we just need to ensure it exists.
 
+    // The UDRAL cookie is used to mark nodes that are auto-configured by a specific auto-configuration authority.
+    // We don't use this value, it is managed by remote nodes; our only responsibility is to persist it across reboots.
+    // This register is entirely optional though; if not provided, the node will have to be configured manually.
+    uavcan_register_Value_1_0_select_string_(&val);
+    val._string.value.count = 0;  // The value should be empty by default, meaning that the node is not configured.
+    registerRead("udral.pnp.cookie", &val);
+
     // Configure the transport by reading the appropriate standard registers.
     uavcan_register_Value_1_0_select_natural16_(&val);
     val.natural16.value.count       = 1;
@@ -663,9 +670,11 @@ int main(const int argc, char* const argv[])
     // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired.
     // Publications:
     state.port_id.pub.differential_pressure =
-        getPublisherSubjectID("differential_pressure", uavcan_si_unit_temperature_Scalar_1_0_FULL_NAME_AND_VERSION_);
+        getPublisherSubjectID("airspeed.differential_pressure",
+                              uavcan_si_unit_temperature_Scalar_1_0_FULL_NAME_AND_VERSION_);
     state.port_id.pub.static_air_temperature =
-        getPublisherSubjectID("static_air_temperature", uavcan_si_unit_temperature_Scalar_1_0_FULL_NAME_AND_VERSION_);
+        getPublisherSubjectID("airspeed.static_air_temperature",
+                              uavcan_si_unit_temperature_Scalar_1_0_FULL_NAME_AND_VERSION_);
     // Subscriptions:
     // (none in this application)
 
