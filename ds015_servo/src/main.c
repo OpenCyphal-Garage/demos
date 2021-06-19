@@ -120,7 +120,7 @@ static CanardMicrosecond getMonotonicMicroseconds()
     {
         abort();
     }
-    return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
+    return (uint64_t) (ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
 }
 
 // Returns the 128-bit unique-ID of the local node. This value is used in uavcan.node.GetInfo.Response and during the
@@ -307,7 +307,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
     if (!anonymous)
     {
         uavcan_node_Heartbeat_1_0 heartbeat = {0};
-        heartbeat.uptime                    = (uint32_t)((monotonic_time - state->started_at) / MEGA);
+        heartbeat.uptime                    = (uint32_t) ((monotonic_time - state->started_at) / MEGA);
         heartbeat.mode.value                = uavcan_node_Mode_1_0_OPERATIONAL;
         const O1HeapDiagnostics heap_diag   = o1heapGetDiagnostics(state->heap);
         if (heap_diag.oom_count > 0)
@@ -331,7 +331,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_heartbeat++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_heartbeat++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -363,7 +363,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                     .transfer_kind  = CanardTransferKindMessage,
                     .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                     .remote_node_id = CANARD_NODE_ID_UNSET,
-                    .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_pnp_allocation++),
+                    .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_pnp_allocation++),
                     .payload_size   = serialized_size,
                     .payload        = &serialized[0],
                 };
@@ -402,7 +402,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
 
     // Disarm automatically if the arming subject has not been updated in a while.
     if (state->servo.arming.armed && ((monotonic_time - state->servo.arming.last_update_at) >
-                                      (uint64_t)(reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
+                                      (uint64_t) (reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
     {
         state->servo.arming.armed = false;
         puts("Disarmed by timeout ");
@@ -471,7 +471,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_port_List_0_1_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_port_list++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_port_list++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -512,7 +512,7 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
         uavcan_register_Value_1_0 reg = {0};
         uavcan_register_Value_1_0_select_natural16_(&reg);
         reg.natural16.value.elements[0] = msg->node_id.value;
-        reg.natural16.value.count = 1;
+        reg.natural16.value.count       = 1;
         registerWrite("uavcan.node.id", &reg);
         // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
         (void) canardRxUnsubscribe(&state->canard,
@@ -781,6 +781,10 @@ extern char** environ;
 
 int main(const int argc, char* const argv[])
 {
+    struct timespec ts;
+    (void) clock_gettime(CLOCK_REALTIME, &ts);
+    srand((unsigned) ts.tv_nsec);
+
     State state = {0};
 
     // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.

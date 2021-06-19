@@ -607,6 +607,10 @@ extern char** environ;
 
 int main(const int argc, char* const argv[])
 {
+    struct timespec ts;
+    (void) clock_gettime(CLOCK_REALTIME, &ts);
+    srand((unsigned) ts.tv_nsec);
+
     State state = {0};
 
     // A simple node like this one typically does not require more than 4 KiB of heap and 4 KiB of stack.
