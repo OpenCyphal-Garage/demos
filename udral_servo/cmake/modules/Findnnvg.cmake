@@ -15,6 +15,11 @@
 # :param str ARG_SER_ENDIANNESS:            One of 'any', 'big', or 'little' to pass as the value of the
 #                                           nnvg `--target-endianness` argument. Set to an empty string
 #                                           to omit this argument.
+# :param str ARG_GENERATE_SUPPORT:          Value for the nnvg --generate-support argument. Valid values are:
+#                                           as-needed (default) - generate support code if serialization is enabled.
+#                                           always - always generate support code.
+#                                           never - never generate support code.
+#                                           only - only generate support code.
 # :param ...:                               A list of paths to use when looking up dependent DSDL types.
 # :returns: Sets a variable "ARG_TARGET_NAME"-OUTPUT in the parent scope to the list of files the target
 #           will generate. For example, if ARG_TARGET_NAME == 'foo-bar' then after calling this function
@@ -24,13 +29,14 @@ function (create_dsdl_target ARG_TARGET_NAME
                              ARG_OUTPUT_FOLDER
                              ARG_DSDL_ROOT_DIR
                              ARG_ENABLE_OVR_VAR_ARRAY
-                             ARG_SER_ENDIANNESS)
+                             ARG_SER_ENDIANNESS
+                             ARG_GENERATE_SUPPORT)
 
     separate_arguments(NNVG_CMD_ARGS UNIX_COMMAND "${NNVG_FLAGS}")
 
-    if (${ARGC} GREATER 6)
+    if (${ARGC} GREATER 7)
         math(EXPR ARG_N_LAST "${ARGC}-1")
-        foreach(ARG_N RANGE 6 ${ARG_N_LAST})
+        foreach(ARG_N RANGE 7 ${ARG_N_LAST})
             list(APPEND NNVG_CMD_ARGS "-I")
             list(APPEND NNVG_CMD_ARGS "${ARGV${ARG_N}}")
         endforeach(ARG_N)
@@ -44,6 +50,8 @@ function (create_dsdl_target ARG_TARGET_NAME
     list(APPEND NNVG_CMD_ARGS "--target-endianness")
     list(APPEND NNVG_CMD_ARGS ${ARG_SER_ENDIANNESS})
     list(APPEND NNVG_CMD_ARGS "--enable-serialization-asserts")
+    list(APPEND NNVG_CMD_ARGS "--generate-support")
+    list(APPEND NNVG_CMD_ARGS ${ARG_GENERATE_SUPPORT})
 
     if (ARG_ENABLE_OVR_VAR_ARRAY)
         list(APPEND NNVG_CMD_ARGS "--enable-override-variable-array-capacity")
