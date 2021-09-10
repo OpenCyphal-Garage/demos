@@ -533,7 +533,7 @@ static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
         char file_name[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1] = {0};
         memcpy(file_name, req->parameter.elements, req->parameter.count);
         file_name[req->parameter.count] = '\0';
-        // TODO: invoke the bootloader with the specified file name.
+        // TODO: invoke the bootloader with the specified file name. See https://github.com/Zubax/kocherga/
         printf("Firmware update request; filename: '%s' \n", &file_name[0]);
         resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_STATE;  // This is a stub.
         break;
@@ -829,6 +829,13 @@ int main(const int argc, char* const argv[])
     uavcan_register_Value_1_0_select_string_(&val);
     val._string.value.count = 0;  // The value should be empty by default, meaning that the node is not configured.
     registerRead("udral.pnp.cookie", &val);
+
+    // Announce which UDRAL network services we support by populating appropriate registers. They are supposed to be
+    // immutable (read-only), but in this simplified demo we don't support that, so we make them mutable (do fix this).
+    uavcan_register_Value_1_0_select_string_(&val);
+    strcpy((char*) val._string.value.elements, "servo");  // The prefix in port names like "servo.feedback", etc.
+    val._string.value.count = strlen((const char*) val._string.value.elements);
+    registerWrite("reg.udral.service.actuator.servo", &val);
 
     // Configure the transport by reading the appropriate standard registers.
     uavcan_register_Value_1_0_select_natural16_(&val);

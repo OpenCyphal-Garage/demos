@@ -374,7 +374,7 @@ static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
         char file_name[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1] = {0};
         memcpy(file_name, req->parameter.elements, req->parameter.count);
         file_name[req->parameter.count] = '\0';
-        // TODO: invoke the bootloader with the specified file name.
+        // TODO: invoke the bootloader with the specified file name. See https://github.com/Zubax/kocherga/
         printf("Firmware update request; filename: '%s' \n", &file_name[0]);
         resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_STATE;  // This is a stub.
         break;
