@@ -128,7 +128,7 @@ static CanardMicrosecond getMonotonicMicroseconds()
 static void getUniqueID(uint8_t out[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_])
 {
     // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
-    // This example is a software-only node so we store the unique-ID in a (read-only) register instead.
+    // This example is a software-only node, so we store the unique-ID in a (read-only) register instead.
     uavcan_register_Value_1_0 value = {0};
     uavcan_register_Value_1_0_select_unstructured_(&value);
     // Populate the default; it is only used at the first run if there is no such register.
@@ -172,7 +172,7 @@ static CanardPortID getSubjectID(const SubjectRole role, const char* const port_
 
     // This part is NOT required but recommended by the Specification for enhanced introspection capabilities. It is
     // very cheap to implement so all implementations should do so. This register simply contains the name of the
-    // type exposed at this port. It should be immutable but it is not strictly required so in this implementation
+    // type exposed at this port. It should be immutable, but it is not strictly required so in this implementation
     // we take shortcuts by making it mutable since it's behaviorally simpler in this specific case.
     snprintf(&register_name[0], sizeof(register_name), "uavcan.%s.%s.type", role_name, port_name);
     uavcan_register_Value_1_0_select_string_(&val);
@@ -445,7 +445,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         }
 
         // Indicate which servers and subscribers we implement.
-        // We could construct the list manually but it's easier and more robust to just query libcanard for that.
+        // We could construct the list manually, but it's easier and more robust to just query libcanard for that.
         const CanardRxSubscription* rxs = state->canard._rx_subscriptions[CanardTransferKindMessage];
         while (rxs != NULL)
         {
@@ -553,7 +553,7 @@ static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
     case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_STORE_PERSISTENT_STATES:
     {
         // If your registers are not automatically synchronized with the non-volatile storage, use this command
-        // to commit them to the storage explicitly. Otherwise it is safe to remove it.
+        // to commit them to the storage explicitly. Otherwise, it is safe to remove it.
         // In this demo, the registers are stored in files, so there is nothing to do.
         resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
         break;
@@ -1065,7 +1065,7 @@ int main(const int argc, char* const argv[])
                 }
                 else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
                 {
-                    ;  // Zero means that the frame did not complete a transfer so there is nothing to do.
+                    (void) 0;  // Zero means that the frame did not complete a transfer so there is nothing to do.
                     // OOM should never occur if the heap is sized correctly. We track OOM errors via heap API.
                 }
                 else

@@ -122,6 +122,7 @@
       <w>modprobe</w>
       <w>mult</w>
       <w>multiframe</w>
+      <w>multithreaded</w>
       <w>mypy</w>
       <w>mypypath</w>
       <w>ncat</w>
