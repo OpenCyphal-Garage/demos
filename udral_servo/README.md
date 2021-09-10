@@ -1,8 +1,8 @@
-# DS-015 servo demo
+# UDRAL servo demo
 
 ## Purpose
 
-This demo implements the full [DS-015](https://github.com/Dronecode/SIG-CAN-Drone)
+This demo implements the full [UDRAL](https://github.com/UAVCAN/public_regulated_data_types/)
 servo network service in a highly portable C application that can be trivially
 adapted to run in a baremetal environment.
 Unless ported, the demo is intended for evaluation on GNU/Linux.
@@ -10,11 +10,11 @@ Unless ported, the demo is intended for evaluation on GNU/Linux.
 This demo supports only UAVCAN/CAN at the moment, but it can be extended to support UAVCAN/UDP or UAVCAN/serial.
 
 The servo network service is defined for two kinds of actuators: translational and rotary.
-The only difference is that one uses `reg.drone.physics.dynamics.translation.Linear`,
-and the other uses `reg.drone.physics.dynamics.rotation.Planar`.
+The only difference is that one uses `reg.udral.physics.dynamics.translation.Linear`,
+and the other uses `reg.udral.physics.dynamics.rotation.Planar`.
 The types can be replaced if necessary.
 
-DS-015 comes with a hard requirement that a node shall be equipped with non-volatile memory for keeping the
+UDRAL comes with a hard requirement that a node shall be equipped with non-volatile memory for keeping the
 node registers (that is, configuration parameters).
 It is not possible to construct a compliant implementation without non-volatile memory.
 
@@ -28,7 +28,7 @@ Build the demo as follows:
 
 ```bash
 git clone --recursive https://github.com/UAVCAN/demos
-cd demos/ds015_servo
+cd demos/udral_servo
 mkdir build && cd build
 cmake .. && make
 ```
@@ -48,10 +48,10 @@ ip link set up vcan0
 ```
 
 Launch the node
-(it is built to emulate an embedded system so it does not accept any arguments or environment variables):
+(it is built to emulate an embedded system, so it does not accept any arguments or environment variables):
 
 ```bash
-./ds015_servo_demo
+./udral_servo_demo
 ```
 
 It may print a few informational messages and then go silent.
@@ -113,8 +113,8 @@ Let's arm it and publish some setpoint:
 
 ```bash
 yakut pub --period=0.5 --count=30 \
-    10:reg.drone.service.common.Readiness.0.1 'value: 3' \
-    50:reg.drone.physics.dynamics.translation.Linear.0.1 'kinematics: {position: {meter: -3.14}}'
+    10:reg.udral.service.common.Readiness.0.1 'value: 3' \
+    50:reg.udral.physics.dynamics.translation.Linear.0.1 'kinematics: {position: {meter: -3.14}}'
 ```
 
 You will see the message that is printed on the terminal change from `DISARMED`
@@ -123,14 +123,13 @@ The monitor should show you something close to this:
 
 <img src="docs/monitor.png" alt="yakut monitor">
 
-Shortly after the publisher is stopped the servo will automatically disarm itself,
-as dictated by the DS-015 standard.
+Shortly after the publisher is stopped the servo will automatically disarm itself, as dictated by the UDRAL standard.
 
 You can listen for the dynamics subject published by the node as follows:
 
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
-yakut sub 100:reg.drone.physics.dynamics.translation.LinearTs.0.1
+yakut sub 100:reg.udral.physics.dynamics.translation.LinearTs.0.1
 ```
 
 You can erase the configuration and go back to factory defaults as follows:
@@ -150,8 +149,8 @@ The corresponding command is (adjust the axes/buttons as necessary):
 
 ```bash
 yakut pub --period=0.1 \
-    10:reg.drone.service.common.Readiness.0.1 'value: !$ "3 if T(1,3) else 0"' \
-    50:reg.drone.physics.dynamics.translation.Linear.0.1 'kinematics: {velocity: {meter_per_second: !$ "A(1,4)*10"}}'
+    10:reg.udral.service.common.Readiness.0.1 'value: !$ "3 if T(1,3) else 0"' \
+    50:reg.udral.physics.dynamics.translation.Linear.0.1 'kinematics: {velocity: {meter_per_second: !$ "A(1,4)*10"}}'
 ```
 
 

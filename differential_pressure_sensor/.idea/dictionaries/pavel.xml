@@ -122,6 +122,7 @@
       <w>modprobe</w>
       <w>mult</w>
       <w>multiframe</w>
+      <w>multithreaded</w>
       <w>mypy</w>
       <w>mypypath</w>
       <w>ncat</w>
@@ -134,6 +135,7 @@
       <w>nfrag</w>
       <w>nihil</w>
       <w>nmap</w>
+      <w>nnvg</w>
       <w>noqa</w>
       <w>norecursedirs</w>
       <w>nosignatures</w>
@@ -253,6 +255,7 @@
       <w>uavcan</w>
       <w>uber</w>
       <w>udpros</w>
+      <w>udral</w>
       <w>ulong</w>
       <w>uname</w>
       <w>undisable</w>

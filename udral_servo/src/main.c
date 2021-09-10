@@ -6,7 +6,7 @@
 ///                            |      |            |         |      |         |
 ///                        ----o------o------------o---------o------o---------o-------
 ///
-/// A demo application showcasing the implementation of a Dronecode UAVCAN Drone Standard DS-015 servo network service.
+/// A demo application showcasing the implementation of a UDRAL servo network service.
 /// This application is intended to run on GNU/Linux but it is trivially adaptable to baremetal environments.
 /// Please refer to the enclosed README for details.
 ///
@@ -26,12 +26,12 @@
 #include <uavcan/_register/List_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 
-#include <reg/drone/service/common/Readiness_0_1.h>
-#include <reg/drone/service/actuator/common/__0_1.h>
-#include <reg/drone/service/actuator/common/Feedback_0_1.h>
-#include <reg/drone/service/actuator/common/Status_0_1.h>
-#include <reg/drone/physics/dynamics/translation/LinearTs_0_1.h>
-#include <reg/drone/physics/electricity/PowerTs_0_1.h>
+#include <reg/udral/service/common/Readiness_0_1.h>
+#include <reg/udral/service/actuator/common/__0_1.h>
+#include <reg/udral/service/actuator/common/Feedback_0_1.h>
+#include <reg/udral/service/actuator/common/Status_0_1.h>
+#include <reg/udral/physics/dynamics/translation/LinearTs_0_1.h>
+#include <reg/udral/physics/electricity/PowerTs_0_1.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +61,7 @@ typedef struct State
         } arming;
 
         /// Setpoint & motion profile (unsupported constraints are to be ignored).
-        /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
+        /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/service/actuator/servo/_.0.1.uavcan
         /// As described in the linked documentation, there are two kinds of servos supported: linear and rotary.
         /// Units per-kind are:   LINEAR                 ROTARY
         float position;      ///< [meter]                [radian]
@@ -71,21 +71,21 @@ typedef struct State
     } servo;
 
     /// These values are read from the registers at startup. You can also implement hot reloading if desired.
-    /// The subjects of the servo network service are defined in the DS-015 data type definitions here:
-    /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
+    /// The subjects of the servo network service are defined in the UDRAL data type definitions here:
+    /// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/service/actuator/servo/_.0.1.uavcan
     struct
     {
         struct
         {
-            CanardPortID servo_feedback;  //< reg.drone.service.actuator.common.Feedback
-            CanardPortID servo_status;    //< reg.drone.service.actuator.common.Status
-            CanardPortID servo_power;     //< reg.drone.physics.electricity.PowerTs
+            CanardPortID servo_feedback;  //< reg.udral.service.actuator.common.Feedback
+            CanardPortID servo_status;    //< reg.udral.service.actuator.common.Status
+            CanardPortID servo_power;     //< reg.udral.physics.electricity.PowerTs
             CanardPortID servo_dynamics;  //< (timestamped dynamics)
         } pub;
         struct
         {
             CanardPortID servo_setpoint;   //< (non-timestamped dynamics)
-            CanardPortID servo_readiness;  //< reg.drone.service.common.Readiness
+            CanardPortID servo_readiness;  //< reg.udral.service.common.Readiness
         } sub;
     } port_id;
 
@@ -120,7 +120,7 @@ static CanardMicrosecond getMonotonicMicroseconds()
     {
         abort();
     }
-    return (uint64_t)(ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
+    return (uint64_t) (ts.tv_sec * 1000000 + ts.tv_nsec / 1000);
 }
 
 // Returns the 128-bit unique-ID of the local node. This value is used in uavcan.node.GetInfo.Response and during the
@@ -128,7 +128,7 @@ static CanardMicrosecond getMonotonicMicroseconds()
 static void getUniqueID(uint8_t out[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_])
 {
     // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
-    // This example is a software-only node so we store the unique-ID in a (read-only) register instead.
+    // This example is a software-only node, so we store the unique-ID in a (read-only) register instead.
     uavcan_register_Value_1_0 value = {0};
     uavcan_register_Value_1_0_select_unstructured_(&value);
     // Populate the default; it is only used at the first run if there is no such register.
@@ -172,7 +172,7 @@ static CanardPortID getSubjectID(const SubjectRole role, const char* const port_
 
     // This part is NOT required but recommended by the Specification for enhanced introspection capabilities. It is
     // very cheap to implement so all implementations should do so. This register simply contains the name of the
-    // type exposed at this port. It should be immutable but it is not strictly required so in this implementation
+    // type exposed at this port. It should be immutable, but it is not strictly required so in this implementation
     // we take shortcuts by making it mutable since it's behaviorally simpler in this specific case.
     snprintf(&register_name[0], sizeof(register_name), "uavcan.%s.%s.type", role_name, port_name);
     uavcan_register_Value_1_0_select_string_(&val);
@@ -207,16 +207,16 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     // Publish feedback if the subject is enabled and the node is non-anonymous.
     if (!anonymous && (state->port_id.pub.servo_feedback <= CANARD_SUBJECT_ID_MAX))
     {
-        reg_drone_service_actuator_common_Feedback_0_1 msg = {0};
-        msg.heartbeat.readiness.value = state->servo.arming.armed ? reg_drone_service_common_Readiness_0_1_ENGAGED
-                                                                  : reg_drone_service_common_Readiness_0_1_STANDBY;
+        reg_udral_service_actuator_common_Feedback_0_1 msg = {0};
+        msg.heartbeat.readiness.value = state->servo.arming.armed ? reg_udral_service_common_Readiness_0_1_ENGAGED
+                                                                  : reg_udral_service_common_Readiness_0_1_STANDBY;
         // If there are any hardware or configuration issues, report them here:
         msg.heartbeat.health.value = uavcan_node_Health_1_0_NOMINAL;
         // Serialize and publish the message:
-        uint8_t      serialized[reg_drone_service_actuator_common_Feedback_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t      serialized[reg_udral_service_actuator_common_Feedback_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t       serialized_size = sizeof(serialized);
         const int8_t err =
-            reg_drone_service_actuator_common_Feedback_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+            reg_udral_service_actuator_common_Feedback_0_1_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
         if (err >= 0)
         {
@@ -237,7 +237,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     // Publish dynamics if the subject is enabled and the node is non-anonymous.
     if (!anonymous && (state->port_id.pub.servo_dynamics <= CANARD_SUBJECT_ID_MAX))
     {
-        reg_drone_physics_dynamics_translation_LinearTs_0_1 msg = {0};
+        reg_udral_physics_dynamics_translation_LinearTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
         msg.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
         // A real application would source these values from the hardware; we republish the setpoint for demo purposes.
@@ -247,10 +247,10 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         msg.value.kinematics.acceleration.meter_per_second_per_second = state->servo.acceleration;
         msg.value.force.newton                                        = state->servo.force;
         // Serialize and publish the message:
-        uint8_t serialized[reg_drone_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t serialized[reg_udral_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t  serialized_size = sizeof(serialized);
         const int8_t err =
-            reg_drone_physics_dynamics_translation_LinearTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+            reg_udral_physics_dynamics_translation_LinearTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
         if (err >= 0)
         {
@@ -271,16 +271,16 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     // Publish power if the subject is enabled and the node is non-anonymous.
     if (!anonymous && (state->port_id.pub.servo_power <= CANARD_SUBJECT_ID_MAX))
     {
-        reg_drone_physics_electricity_PowerTs_0_1 msg = {0};
+        reg_udral_physics_electricity_PowerTs_0_1 msg = {0};
         // Our node does not synchronize its clock with the network, so we cannot timestamp our publications:
         msg.timestamp.microsecond = uavcan_time_SynchronizedTimestamp_1_0_UNKNOWN;
         // TODO populate real values:
         msg.value.current.ampere = 20.315F;
         msg.value.voltage.volt   = 51.3F;
         // Serialize and publish the message:
-        uint8_t serialized[reg_drone_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t serialized[reg_udral_physics_dynamics_translation_LinearTs_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t  serialized_size = sizeof(serialized);
-        const int8_t err = reg_drone_physics_electricity_PowerTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+        const int8_t err = reg_udral_physics_electricity_PowerTs_0_1_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
         if (err >= 0)
         {
@@ -307,7 +307,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
     if (!anonymous)
     {
         uavcan_node_Heartbeat_1_0 heartbeat = {0};
-        heartbeat.uptime                    = (uint32_t)((monotonic_time - state->started_at) / MEGA);
+        heartbeat.uptime                    = (uint32_t) ((monotonic_time - state->started_at) / MEGA);
         heartbeat.mode.value                = uavcan_node_Mode_1_0_OPERATIONAL;
         const O1HeapDiagnostics heap_diag   = o1heapGetDiagnostics(state->heap);
         if (heap_diag.oom_count > 0)
@@ -331,7 +331,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_heartbeat++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_heartbeat++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -363,7 +363,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                     .transfer_kind  = CanardTransferKindMessage,
                     .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                     .remote_node_id = CANARD_NODE_ID_UNSET,
-                    .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_pnp_allocation++),
+                    .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_pnp_allocation++),
                     .payload_size   = serialized_size,
                     .payload        = &serialized[0],
                 };
@@ -377,12 +377,12 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
     if (!anonymous)
     {
         // Publish the servo status -- this is a low-rate message with low-severity diagnostics.
-        reg_drone_service_actuator_common_Status_0_1 msg = {0};
+        reg_udral_service_actuator_common_Status_0_1 msg = {0};
         // TODO: POPULATE THE MESSAGE: temperature, errors, etc.
-        uint8_t      serialized[reg_drone_service_actuator_common_Status_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t      serialized[reg_udral_service_actuator_common_Status_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t       serialized_size = sizeof(serialized);
         const int8_t err =
-            reg_drone_service_actuator_common_Status_0_1_serialize_(&msg, &serialized[0], &serialized_size);
+            reg_udral_service_actuator_common_Status_0_1_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
         if (err >= 0)
         {
@@ -402,7 +402,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
 
     // Disarm automatically if the arming subject has not been updated in a while.
     if (state->servo.arming.armed && ((monotonic_time - state->servo.arming.last_update_at) >
-                                      (uint64_t)(reg_drone_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
+                                      (uint64_t) (reg_udral_service_actuator_common___0_1_CONTROL_TIMEOUT * MEGA)))
     {
         state->servo.arming.armed = false;
         puts("Disarmed by timeout ");
@@ -445,7 +445,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         }
 
         // Indicate which servers and subscribers we implement.
-        // We could construct the list manually but it's easier and more robust to just query libcanard for that.
+        // We could construct the list manually, but it's easier and more robust to just query libcanard for that.
         const CanardRxSubscription* rxs = state->canard._rx_subscriptions[CanardTransferKindMessage];
         while (rxs != NULL)
         {
@@ -471,7 +471,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_port_List_0_1_FIXED_PORT_ID_,
                 .remote_node_id = CANARD_NODE_ID_UNSET,
-                .transfer_id    = (CanardTransferID)(state->next_transfer_id.uavcan_node_port_list++),
+                .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_port_list++),
                 .payload_size   = serialized_size,
                 .payload        = &serialized[0],
             };
@@ -480,9 +480,9 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
     }
 }
 
-/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
+/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/service/actuator/servo/_.0.1.uavcan
 static void processMessageServoSetpoint(State* const                                                   state,
-                                        const reg_drone_physics_dynamics_translation_Linear_0_1* const msg)
+                                        const reg_udral_physics_dynamics_translation_Linear_0_1* const msg)
 {
     state->servo.position     = msg->kinematics.position.meter;
     state->servo.velocity     = msg->kinematics.velocity.meter_per_second;
@@ -490,12 +490,12 @@ static void processMessageServoSetpoint(State* const                            
     state->servo.force        = msg->force.newton;
 }
 
-/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/common/Readiness.0.1.uavcan
+/// https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/service/common/Readiness.0.1.uavcan
 static void processMessageServiceReadiness(State* const                                        state,
-                                           const reg_drone_service_common_Readiness_0_1* const msg,
+                                           const reg_udral_service_common_Readiness_0_1* const msg,
                                            const CanardMicrosecond                             monotonic_time)
 {
-    state->servo.arming.armed          = msg->value >= reg_drone_service_common_Readiness_0_1_ENGAGED;
+    state->servo.arming.armed          = msg->value >= reg_udral_service_common_Readiness_0_1_ENGAGED;
     state->servo.arming.last_update_at = monotonic_time;
 }
 
@@ -512,7 +512,7 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
         uavcan_register_Value_1_0 reg = {0};
         uavcan_register_Value_1_0_select_natural16_(&reg);
         reg.natural16.value.elements[0] = msg->node_id.value;
-        reg.natural16.value.count = 1;
+        reg.natural16.value.count       = 1;
         registerWrite("uavcan.node.id", &reg);
         // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
         (void) canardRxUnsubscribe(&state->canard,
@@ -533,7 +533,7 @@ static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
         char file_name[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1] = {0};
         memcpy(file_name, req->parameter.elements, req->parameter.count);
         file_name[req->parameter.count] = '\0';
-        // TODO: invoke the bootloader with the specified file name.
+        // TODO: invoke the bootloader with the specified file name. See https://github.com/Zubax/kocherga/
         printf("Firmware update request; filename: '%s' \n", &file_name[0]);
         resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_STATE;  // This is a stub.
         break;
@@ -553,7 +553,7 @@ static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
     case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_STORE_PERSISTENT_STATES:
     {
         // If your registers are not automatically synchronized with the non-volatile storage, use this command
-        // to commit them to the storage explicitly. Otherwise it is safe to remove it.
+        // to commit them to the storage explicitly. Otherwise, it is safe to remove it.
         // In this demo, the registers are stored in files, so there is nothing to do.
         resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
         break;
@@ -643,16 +643,16 @@ static void processReceivedTransfer(State* const state, const CanardTransfer* co
         size_t size = transfer->payload_size;
         if (transfer->port_id == state->port_id.sub.servo_setpoint)
         {
-            reg_drone_physics_dynamics_translation_Linear_0_1 msg = {0};
-            if (reg_drone_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            reg_udral_physics_dynamics_translation_Linear_0_1 msg = {0};
+            if (reg_udral_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
                 processMessageServoSetpoint(state, &msg);
             }
         }
         else if (transfer->port_id == state->port_id.sub.servo_readiness)
         {
-            reg_drone_service_common_Readiness_0_1 msg = {0};
-            if (reg_drone_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            reg_udral_service_common_Readiness_0_1 msg = {0};
+            if (reg_udral_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
             {
                 processMessageServiceReadiness(state, &msg, transfer->timestamp_usec);
             }
@@ -781,6 +781,10 @@ extern char** environ;
 
 int main(const int argc, char* const argv[])
 {
+    struct timespec ts;
+    (void) clock_gettime(CLOCK_REALTIME, &ts);
+    srand((unsigned) ts.tv_nsec);
+
     State state = {0};
 
     // A simple application like a servo node typically does not require more than 16 KiB of heap and 4 KiB of stack.
@@ -819,6 +823,20 @@ int main(const int argc, char* const argv[])
     val._string.value.count = 0;
     registerRead("uavcan.node.description", &val);  // We don't need the value, we just need to ensure it exists.
 
+    // The UDRAL cookie is used to mark nodes that are auto-configured by a specific auto-configuration authority.
+    // We don't use this value, it is managed by remote nodes; our only responsibility is to persist it across reboots.
+    // This register is entirely optional though; if not provided, the node will have to be configured manually.
+    uavcan_register_Value_1_0_select_string_(&val);
+    val._string.value.count = 0;  // The value should be empty by default, meaning that the node is not configured.
+    registerRead("udral.pnp.cookie", &val);
+
+    // Announce which UDRAL network services we support by populating appropriate registers. They are supposed to be
+    // immutable (read-only), but in this simplified demo we don't support that, so we make them mutable (do fix this).
+    uavcan_register_Value_1_0_select_string_(&val);
+    strcpy((char*) val._string.value.elements, "servo");  // The prefix in port names like "servo.feedback", etc.
+    val._string.value.count = strlen((const char*) val._string.value.elements);
+    registerWrite("reg.udral.service.actuator.servo", &val);
+
     // Configure the transport by reading the appropriate standard registers.
     uavcan_register_Value_1_0_select_natural16_(&val);
     val.natural16.value.count       = 1;
@@ -835,35 +853,35 @@ int main(const int argc, char* const argv[])
     }
 
     // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired. Specification here:
-    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/service/actuator/servo/_.0.1.uavcan
-    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/drone/README.md
+    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/service/actuator/servo/_.0.1.uavcan
+    // https://github.com/UAVCAN/public_regulated_data_types/blob/master/reg/udral/README.md
     // As follows from the Specification, the register group name prefix can be arbitrary; here we just use "servo".
     // Publications:
     state.port_id.pub.servo_feedback =  // High-rate status information: all good or not, engaged or sleeping.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.feedback",
-                     reg_drone_service_actuator_common_Feedback_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_service_actuator_common_Feedback_0_1_FULL_NAME_AND_VERSION_);
     state.port_id.pub.servo_status =  // A low-rate high-level status overview: temperatures, fault flags, errors.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.status",
-                     reg_drone_service_actuator_common_Status_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_service_actuator_common_Status_0_1_FULL_NAME_AND_VERSION_);
     state.port_id.pub.servo_power =  // Electric power input measurements (voltage and current).
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.power",
-                     reg_drone_physics_electricity_PowerTs_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_physics_electricity_PowerTs_0_1_FULL_NAME_AND_VERSION_);
     state.port_id.pub.servo_dynamics =  // Position/speed/acceleration/force feedback.
         getSubjectID(SUBJECT_ROLE_PUBLISHER,
                      "servo.dynamics",
-                     reg_drone_physics_dynamics_translation_LinearTs_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_physics_dynamics_translation_LinearTs_0_1_FULL_NAME_AND_VERSION_);
     // Subscriptions:
     state.port_id.sub.servo_setpoint =  // This message actually commands the servo setpoint with the motion profile.
         getSubjectID(SUBJECT_ROLE_SUBSCRIBER,
                      "servo.setpoint",
-                     reg_drone_physics_dynamics_translation_Linear_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_physics_dynamics_translation_Linear_0_1_FULL_NAME_AND_VERSION_);
     state.port_id.sub.servo_readiness =  // Arming subject: whether to act upon the setpoint or to stay idle.
         getSubjectID(SUBJECT_ROLE_SUBSCRIBER,
                      "servo.readiness",
-                     reg_drone_service_common_Readiness_0_1_FULL_NAME_AND_VERSION_);
+                     reg_udral_service_common_Readiness_0_1_FULL_NAME_AND_VERSION_);
 
     // Set up subject subscriptions and RPC-service servers.
     // Message subscriptions:
@@ -890,7 +908,7 @@ int main(const int argc, char* const argv[])
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
                               state.port_id.sub.servo_setpoint,
-                              reg_drone_physics_dynamics_translation_Linear_0_1_EXTENT_BYTES_,
+                              reg_udral_physics_dynamics_translation_Linear_0_1_EXTENT_BYTES_,
                               servo_transfer_id_timeout,
                               &rx);
         if (res < 0)
@@ -905,7 +923,7 @@ int main(const int argc, char* const argv[])
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
                               state.port_id.sub.servo_readiness,
-                              reg_drone_service_common_Readiness_0_1_EXTENT_BYTES_,
+                              reg_udral_service_common_Readiness_0_1_EXTENT_BYTES_,
                               servo_transfer_id_timeout,
                               &rx);
         if (res < 0)
@@ -1054,7 +1072,7 @@ int main(const int argc, char* const argv[])
                 }
                 else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
                 {
-                    ;  // Zero means that the frame did not complete a transfer so there is nothing to do.
+                    (void) 0;  // Zero means that the frame did not complete a transfer so there is nothing to do.
                     // OOM should never occur if the heap is sized correctly. We track OOM errors via heap API.
                 }
                 else

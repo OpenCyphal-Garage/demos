@@ -3,8 +3,8 @@
 # Author: Pavel Kirienko <pavel@uavcan.org>
 
 cmake_minimum_required(VERSION 3.17)
-project(ds015_servo_demo C CXX)
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+project(udral_servo_demo C CXX)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
@@ -26,17 +26,26 @@ add_definitions(
         -DVERSION_MAJOR=1
         -DVERSION_MINOR=0
         -DVCS_REVISION_ID=0x${vcs_revision_id}ULL
-        -DNODE_NAME="org.uavcan.demos.ds015.servo"
+        -DNODE_NAME="org.uavcan.demos.udral.servo"
 )
 
 # Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
 # Alternatively, you can invoke the transpiler manually or use https://nunaweb.uavcan.org.
 find_package(nnvg REQUIRED)
+create_dsdl_target(             # Generate the support library for generated C headers, which is "nunavut.h".
+        "nunavut_support"
+        c
+        ${CMAKE_BINARY_DIR}/transpiled
+        ""
+        OFF
+        little
+        "only"
+)
 set(dsdl_root_namespace_dirs                # List all DSDL root namespaces to transpile here.
         ${submodules}/public_regulated_data_types/uavcan
         ${submodules}/public_regulated_data_types/reg
 )
-foreach(ns_dir ${dsdl_root_namespace_dirs})
+foreach (ns_dir ${dsdl_root_namespace_dirs})
     get_filename_component(ns ${ns_dir} NAME)
     message(STATUS "DSDL namespace ${ns} at ${ns_dir}")
     create_dsdl_target(
@@ -46,9 +55,11 @@ foreach(ns_dir ${dsdl_root_namespace_dirs})
             ${ns_dir}                       # Source directory
             OFF                             # Disable variable array capacity override
             little                          # Endianness of the target platform (alternatives: "big", "any")
+            "never"                         # Support files are generated once in the nunavut_support target (above)
             ${dsdl_root_namespace_dirs}     # Look-up DSDL namespaces
     )
-endforeach()
+    add_dependencies("dsdl_${ns}" nunavut_support)
+endforeach ()
 include_directories(SYSTEM ${CMAKE_BINARY_DIR}/transpiled)  # Make the transpiled headers available for inclusion.
 add_definitions(-DNUNAVUT_ASSERT=assert)
 
@@ -61,10 +72,10 @@ add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
 # Build the application.
-add_executable(ds015_servo_demo
+add_executable(udral_servo_demo
         src/main.c
         src/register.c
         src/socketcan.c
 )
-add_dependencies(ds015_servo_demo dsdl_uavcan dsdl_reg)
-target_link_libraries(ds015_servo_demo canard o1heap)
+add_dependencies(udral_servo_demo dsdl_uavcan dsdl_reg)
+target_link_libraries(udral_servo_demo canard o1heap)

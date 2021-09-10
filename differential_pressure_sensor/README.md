@@ -80,8 +80,8 @@ assuming that the node got allocated the node-ID of 125:
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
 export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
-yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.differential_pressure.id},  value: {natural16: {value: 100}}}"
-yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.static_air_temperature.id}, value: {natural16: {value: 101}}}"
+yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.airspeed.differential_pressure.id},  value: {natural16: {value: 100}}}"
+yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.airspeed.static_air_temperature.id}, value: {natural16: {value: 101}}}"
 ```
 
 The node is configured now, but we need to restart it before the configuration parameter changes take effect:
