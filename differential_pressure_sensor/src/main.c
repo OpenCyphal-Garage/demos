@@ -656,6 +656,13 @@ int main(const int argc, char* const argv[])
     val._string.value.count = 0;  // The value should be empty by default, meaning that the node is not configured.
     registerRead("udral.pnp.cookie", &val);
 
+    // Announce which UDRAL network services we support by populating appropriate registers. They are supposed to be
+    // immutable (read-only), but in this simplified demo we don't support that, so we make them mutable (do fix this).
+    uavcan_register_Value_1_0_select_string_(&val);
+    strcpy((char*) val._string.value.elements, "airspeed");  // Prefix in port names like "differential_pressure", etc.
+    val._string.value.count = strlen((const char*) val._string.value.elements);
+    registerWrite("reg.udral.service.pitot", &val);
+
     // Configure the transport by reading the appropriate standard registers.
     uavcan_register_Value_1_0_select_natural16_(&val);
     val.natural16.value.count       = 1;
