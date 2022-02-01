@@ -23,7 +23,7 @@ static inline FILE* registerOpen(const char* const register_name, const bool wri
     (void) snprintf(&file_path[0], sizeof(file_path), "%s/%s", RegistryDirName, register_name);
     if (write)
     {
-        (void) mkdir(RegistryDirName, S_IRWXU | S_IRWXG | S_IRWXO);
+        (void) mkdir(RegistryDirName, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     }
     return fopen(&file_path[0], write ? "wb" : "rb");
 }
