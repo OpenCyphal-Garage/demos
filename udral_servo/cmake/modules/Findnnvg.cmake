@@ -1,7 +1,7 @@
 # Find nnvg and setup python environment to generate C++ from DSDL.
 # Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# Copyright 2021 UAVCAN Consortium <consortium@uavcan.org>
-# This file is adapted from: https://github.com/UAVCAN/nunavut/blob/main/verification/cmake/modules/Findnnvg.cmake
+# Copyright 2021 OpenCyphal <consortium@opencyphal.org>
+# This file is adapted from: https://github.com/OpenCyphal/nunavut/blob/main/verification/cmake/modules/Findnnvg.cmake
 
 # Creates a target that will generate source code from dsdl definitions.
 #

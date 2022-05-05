@@ -1,6 +1,6 @@
 # This software is distributed under the terms of the MIT License.
-# Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
-# Author: Pavel Kirienko <pavel@uavcan.org>
+# Copyright (C) 2021 OpenCyphal <consortium@opencyphal.org>
+# Author: Pavel Kirienko <pavel@opencyphal.org>
 
 cmake_minimum_required(VERSION 3.17)
 project(udral_servo_demo C CXX)
@@ -26,11 +26,11 @@ add_definitions(
         -DVERSION_MAJOR=1
         -DVERSION_MINOR=0
         -DVCS_REVISION_ID=0x${vcs_revision_id}ULL
-        -DNODE_NAME="org.uavcan.demos.udral.servo"
+        -DNODE_NAME="org.opencyphal.demos.udral.servo"
 )
 
 # Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
-# Alternatively, you can invoke the transpiler manually or use https://nunaweb.uavcan.org.
+# Alternatively, you can invoke the transpiler manually or use https://nunaweb.opencyphal.org.
 find_package(nnvg REQUIRED)
 create_dsdl_target(             # Generate the support library for generated C headers, which is "nunavut.h".
         "nunavut_support"
