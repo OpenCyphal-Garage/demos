@@ -1,16 +1,15 @@
-///                         __   __   _______   __   __   _______   _______   __   __
-///                        |  | |  | /   _   ` |  | |  | /   ____| /   _   ` |  ` |  |
-///                        |  | |  | |  |_|  | |  | |  | |  |      |  |_|  | |   `|  |
-///                        |  |_|  | |   _   | `  `_/  / |  |____  |   _   | |  |`   |
-///                        `_______/ |__| |__|  `_____/  `_______| |__| |__| |__| `__|
-///                            |      |            |         |      |         |
-///                        ----o------o------------o---------o------o---------o-------
+///                            ____                   ______            __          __
+///                           / __ `____  ___  ____  / ____/_  ______  / /_  ____  / /
+///                          / / / / __ `/ _ `/ __ `/ /   / / / / __ `/ __ `/ __ `/ /
+///                         / /_/ / /_/ /  __/ / / / /___/ /_/ / /_/ / / / / /_/ / /
+///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
+///                             /_/                     /____/_/
 ///
-/// Registers are named values that keep various configuration parameters of the local UAVCAN node (application).
+/// Registers are named values that keep various configuration parameters of the local Cyphal node (application).
 /// Some of these parameters are used by the business logic of the application (e.g., PID gains, perfcounters);
-/// others are used by the UAVCAN stack (e.g., port-IDs, node-ID, transport configuration, introspection, and so on).
+/// others are used by the Cyphal stack (e.g., port-IDs, node-ID, transport configuration, introspection, and so on).
 /// Registers of the latter category are all named with the same prefix "uavcan.", and their names and semantics
-/// are regulated by the Specification to ensure consistency across the ecosystem.
+/// are regulated by the Cyphal Specification to ensure consistency across the ecosystem.
 ///
 /// The Specification doesn't define how the registers are to be stored since this part does not affect network
 /// interoperability. In this demo we use a very simple and portable approach where each register is stored as
@@ -18,11 +17,11 @@
 /// values are serialized in the DSDL format (i.e., same format that is used for network exchange).
 /// Deeply embedded systems may either use the same approach with the help of some compact fault-tolerant filesystem
 /// (such as, for example, LittleFS: https://github.com/littlefs-project/littlefs), or they can resort to a low-level
-/// specialized approach using on-chip EEPROM or similar (like PX4, Sapog, ArduPilot, etc).
+/// specialized approach using on-chip EEPROM or similar (like PX4, Sapog, etc).
 ///
 /// This software is distributed under the terms of the MIT License.
-/// Copyright (C) 2021 UAVCAN Consortium <consortium@uavcan.org>
-/// Author: Pavel Kirienko <pavel@uavcan.org>
+/// Copyright (C) 2021 OpenCyphal <maintainers@opencyphal.org>
+/// Author: Pavel Kirienko <pavel@opencyphal.org>
 
 #pragma once
 
