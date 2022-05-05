@@ -117,8 +117,8 @@ static void getUniqueID(uint8_t out[uavcan_node_GetInfo_Response_1_0_unique_id_A
 
 /// Reads the port-ID from the corresponding standard register. The standard register schema is documented in
 /// the Cyphal Specification, section for the standard service uavcan.register.Access. You can also find it here:
-/// https://github.com/OpenCyphal/public_regulated_data_types/blob/master/uavcan/register/384.Access.1.0.uavcan
-/// A very hands-on demo is available in Python: https://pyuavcan.readthedocs.io/en/stable/pages/demo.html
+/// https://github.com/OpenCyphal/public_regulated_data_types/blob/master/uavcan/register/384.Access.1.0.dsdl
+/// A very hands-on demo is available in Python: https://pycyphal.readthedocs.io/en/stable/pages/demo.html
 static CanardPortID getPublisherSubjectID(const char* const port_name, const char* const type_name)
 {
     // Deduce the register name from port name.
@@ -251,7 +251,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         // The Specification says that the allocation request publication interval shall be randomized.
         // We implement randomization by calling rand() at fixed intervals and comparing it against some threshold.
         // There are other ways to do it, of course. See the docs in the Specification or in the DSDL definition here:
-        // https://github.com/OpenCyphal/public_regulated_data_types/blob/master/uavcan/pnp/8165.NodeIDAllocationData.2.0.uavcan
+        // https://github.com/OpenCyphal/public_regulated_data_types/blob/master/uavcan/pnp/8165.NodeIDAllocationData.2.0.dsdl
         // Note that a high-integrity/safety-certified application is unlikely to be able to rely on this feature.
         if (rand() > RAND_MAX / 2)  // NOLINT
         {
