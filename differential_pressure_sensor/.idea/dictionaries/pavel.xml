@@ -38,6 +38,7 @@
       <w>creationflags</w>
       <w>ctrunc</w>
       <w>cyber</w>
+      <w>cyphal</w>
       <w>datagrams</w>
       <w>deadbeef</w>
       <w>deallocated</w>
@@ -96,6 +97,7 @@
       <w>icmp</w>
       <w>iface</w>
       <w>ifaces</w>
+      <w>ifidx</w>
       <w>inaddr</w>
       <w>inet</w>
       <w>intersphinx</w>
@@ -143,12 +145,14 @@
       <w>ntdll</w>
       <w>octothorp</w>
       <w>onboard</w>
+      <w>opencyphal</w>
       <w>packbits</w>
       <w>pathlib</w>
       <w>pcap</w>
       <w>pcapy</w>
       <w>perfcounters</w>
       <w>pfft</w>
+      <w>pitot</w>
       <w>pizdec</w>
       <w>pizdets</w>
       <w>pkgutil</w>
@@ -258,6 +262,7 @@
       <w>udral</w>
       <w>ulong</w>
       <w>uname</w>
+      <w>unconfigured</w>
       <w>undisable</w>
       <w>undoc</w>
       <w>unhashable</w>

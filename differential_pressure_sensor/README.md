@@ -6,18 +6,18 @@ This demo implements a simple differential pressure & static air temperature sen
 in a highly portable C application that can be trivially adapted to run in a baremetal environment.
 Unless ported, the demo is intended for evaluation on GNU/Linux.
 
-This demo supports only UAVCAN/CAN at the moment, but it can be extended to support UAVCAN/UDP or UAVCAN/serial.
+This demo supports only Cyphal/CAN at the moment, but it can be extended to support Cyphal/UDP or Cyphal/serial.
 
 
 ## Preparation
 
-You will need GNU/Linux, CMake, a C11 compiler, [Yakut](https://github.com/UAVCAN/yakut),
+You will need GNU/Linux, CMake, a C11 compiler, [Yakut](https://github.com/OpenCyphal/yakut),
 and [SocketCAN utils](https://github.com/linux-can/can-utils).
 
 Build the demo as follows:
 
 ```bash
-git clone --recursive https://github.com/UAVCAN/demos
+git clone --recursive https://github.com/OpenCyphal/demos
 cd demos/differential_pressure_sensor
 mkdir build && cd build
 cmake .. && make
@@ -62,8 +62,8 @@ Next, we launch a PnP node-ID allocator available in Yakut (PX4 also implements 
 
 ```bash
 export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=127                 # This node-ID is for Yakut.
-yakut monitor -P ~/allocation_table.db
+export UAVCAN__NODE__ID=127                     # This node-ID is for Yakut.
+y mon --plug-and-play ~/allocation_table.db
 ```
 
 This command will run the monitor together with the allocator.
@@ -74,20 +74,30 @@ then roughly the following picture should appear on the monitor:
 
 That means that our node is running, but it is unable to publish measurements because the respective subjects
 remain unconfigured.
-Configure them (do not stop the monitor though, otherwise you won't know what's happening on the bus),
-assuming that the node got allocated the node-ID of 125:
+So let's configure them (do not stop the monitor though, otherwise you won't know what's happening on the bus),
+assuming that the node got allocated the node-ID of 125.
+First, it helps to know what registers are available at all:
 
 ```bash
-export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
-yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.airspeed.differential_pressure.id},  value: {natural16: {value: 100}}}"
-yakut call 125 uavcan.register.Access.1.0 "{name: {name: uavcan.pub.airspeed.static_air_temperature.id}, value: {natural16: {value: 101}}}"
+$ export UAVCAN__CAN__IFACE="socketcan:vcan0"
+$ export UAVCAN__NODE__ID=126                   # This node-ID is for Yakut.
+$ y rl 125
+[reg.udral.service.pitot, uavcan.can.mtu, uavcan.node.description, uavcan.node.id, uavcan.node.unique_id, uavcan.pub.airspeed.differential_pressure.id, uavcan.pub.airspeed.differential_pressure.type, uavcan.pub.airspeed.static_air_temperature.id, uavcan.pub.airspeed.static_air_temperature.type, udral.pnp.cookie]
+$ y rl 125, | y rb                              # You can also read all registers like this
+# (output not shown)
+```
+
+Configure the subject-IDs:
+
+```bash
+y r 125 uavcan.pub.airspeed.differential_pressure.id  100
+y r 125 uavcan.pub.airspeed.static_air_temperature.id 101
 ```
 
 The node is configured now, but we need to restart it before the configuration parameter changes take effect:
 
 ```bash
-yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65535"
+y cmd 125 restart -e
 ```
 
 You should see candump start printing a lot more frames because the demo is now publishing the sensor data.
@@ -98,16 +108,13 @@ The monitor will also show the subjects that we just configured.
 You can subscribe to the published differential pressure using Yakut as follows:
 
 ```bash
-export UAVCAN__CAN__IFACE="socketcan:vcan0"
-yakut sub 100:uavcan.si.unit.pressure.Scalar.1.0
+y sub 100:uavcan.si.unit.pressure.scalar
 ```
 
 You can erase the configuration and go back to factory defaults as follows:
 
 ```bash
-export UAVCAN__CAN__IFACE="socketcan:vcan0"
-export UAVCAN__NODE__ID=126                 # This node-ID is for Yakut.
-yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
+y cmd 125 factory_reset
 ```
 
 
@@ -115,5 +122,5 @@ yakut call 125 uavcan.node.ExecuteCommand.1.1 "command: 65532"
 
 Just read the code.
 
-The files `socketcan.[ch]` were taken from <https://github.com/UAVCAN/platform_specific_components>.
+The files `socketcan.[ch]` were taken from <https://github.com/OpenCyphal/platform_specific_components>.
 You may (or may not) find something relevant for your target platform there, too.
