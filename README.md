@@ -19,8 +19,8 @@ For a more hands-on experience, consider completing the
 
 There is a separate directory per demo.
 Demos may depend on the components published by the OpenCyphal team, such as
-[Libcanard](https://github.com/Cyphal/libcanard) or the
-[public regulated DSDL definitions](https://github.com/Cyphal/public_regulated_data_types/).
+[Libcanard](https://github.com/OpenCyphal/libcanard) or the
+[public regulated DSDL definitions](https://github.com/OpenCyphal/public_regulated_data_types/).
 These are collected under `submodules/`.
 You will need to add them to your application separately in whatever way suits your workflow best ---
 as a Git submodule, by copy-pasting the sources, using CMake's `ExternalProject_Add()`, etc.
