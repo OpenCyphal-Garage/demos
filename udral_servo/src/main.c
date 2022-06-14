@@ -26,7 +26,7 @@
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 
 #include <reg/udral/service/common/Readiness_0_1.h>
-#include <reg/udral/service/actuator/common/__0_1.h>
+#include <reg/udral/service/actuator/common/_0_1.h>
 #include <reg/udral/service/actuator/common/Feedback_0_1.h>
 #include <reg/udral/service/actuator/common/Status_0_1.h>
 #include <reg/udral/physics/dynamics/translation/LinearTs_0_1.h>
