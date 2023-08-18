@@ -15,30 +15,21 @@
 /// Aside from that, it also publishes on the standard Heartbeat subject and responds to certain standard RPC requests.
 
 #include <udpard.h>
+#include "memory_block.h"
 
 /// The number of network interfaces used. LibUDPard natively supports non-redundant interfaces,
 /// doubly-redundant, and triply-redundant network interfaces for fault tolerance.
 #define IFACE_COUNT 2
 
+/// This is used for sizing the memory pools for dynamic memory management.
+/// We use a shared pool for the TX queue and for the RX buffers; the edge case is that we can have up to this
+/// many items in the TX queue per iface or this many pending RX fragments per iface.
+#define RESOURCE_LIMIT_PAYLOAD_FRAGMENTS 64
+/// Each remote node emitting data on a given port that we are interested in requires us to allocate a small amount
+/// of memory to keep certain state associated with that node. This is the maximum number of nodes we can handle.
+#define RESOURCE_LIMIT_SESSIONS 1024
+
 typedef uint_least8_t byte_t;
-
-struct MemoryBlockAllocator
-{
-    size_t  block_size_bytes;
-    size_t  capacity_blocks;
-    size_t  allocated_blocks;
-    byte_t* head;
-};
-
-void* memoryBlockAllocate(void* const user_reference, const size_t size)
-{
-    //
-}
-
-void memoryBlockDeallocate(void* const user_reference, const size_t size, void* const pointer)
-{
-    //
-}
 
 struct Publisher
 {
@@ -85,5 +76,12 @@ struct Application
 
 int main(void)
 {
+    // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
+    // They may change when migrating between different versions of the library or when building the code for a
+    // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 400, RESOURCE_LIMIT_SESSIONS);
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
+
     return 0;
 }

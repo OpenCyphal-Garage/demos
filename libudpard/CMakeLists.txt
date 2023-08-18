@@ -11,7 +11,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
 # Set up static analysis.
-set(NO_STATIC_ANALYSIS OFF CACHE BOOL "disable udpard static analysis")
+set(NO_STATIC_ANALYSIS OFF CACHE BOOL "disable static analysis")
 if (NOT NO_STATIC_ANALYSIS)
     # clang-tidy (separate config files per directory)
     find_program(clang_tidy NAMES clang-tidy)
