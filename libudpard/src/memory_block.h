@@ -11,8 +11,8 @@
 
 /// This can be replaced with the standard malloc()/free(), if available.
 /// This macro is a crude substitute for the missing metaprogramming facilities in C.
-#define MEMORY_BLOCK_ALLOCATOR_DEFINE(_name, _block_size_bytes, _block_count)       \
-    static uint_least8_t        _name##_pool[(_block_size_bytes) * (_block_count)]; \
+#define MEMORY_BLOCK_ALLOCATOR_DEFINE(_name, _block_size_bytes, _block_count)                      \
+    _Alignas(max_align_t) static uint_least8_t _name##_pool[(_block_size_bytes) * (_block_count)]; \
     struct MemoryBlockAllocator _name = memoryBlockInit(sizeof(_name##_pool), &_name##_pool[0], (_block_size_bytes))
 
 struct MemoryBlockAllocator
@@ -24,22 +24,29 @@ struct MemoryBlockAllocator
 
 /// Constructs a memory block allocator bound to the specified memory pool.
 /// The block count will be deduced from the pool size and block size; both may be adjusted to ensure alignment.
+/// If the pool or block size are not properly aligned, some memory may need to be wasted to enforce alignment.
 struct MemoryBlockAllocator memoryBlockInit(const size_t pool_size_bytes,
                                             void* const  pool,
                                             const size_t block_size_bytes)
 {
-    const size_t bs = (block_size_bytes + sizeof(max_align_t) - 1U) & ~(sizeof(max_align_t) - 1U);
-    assert(((uintptr_t) pool % sizeof(max_align_t)) == 0);
-    assert((pool_size_bytes % bs) == 0);
-    const size_t block_count = pool_size_bytes / bs;
+    // Enforce alignment and padding of the input arguments. We may waste some space as a result.
+    const size_t   bs       = (block_size_bytes + sizeof(max_align_t) - 1U) & ~(sizeof(max_align_t) - 1U);
+    size_t         sz_bytes = pool_size_bytes;
+    uint_least8_t* ptr      = (uint_least8_t*) pool;
+    while ((((uintptr_t) ptr) % sizeof(max_align_t)) != 0)
+    {
+        ptr++;
+        if (sz_bytes > 0)
+        {
+            sz_bytes--;
+        }
+    }
+    const size_t block_count = sz_bytes / bs;
     for (size_t i = 0; i < block_count; i++)
     {
-        *(void**) (void*) (((uint_least8_t*) pool) + (i * bs)) =
-            ((i + 1) < block_count)  // Next block exists?
-                ? ((void*) (((uint_least8_t*) pool) + ((i + 1) * bs)))
-                : NULL;
+        *(void**) (void*) (ptr + (i * bs)) = ((i + 1) < block_count) ? ((void*) (ptr + ((i + 1) * bs))) : NULL;
     }
-    const struct MemoryBlockAllocator out = {.allocated_blocks = 0, .block_size_bytes = bs, .head = pool};
+    const struct MemoryBlockAllocator out = {.allocated_blocks = 0, .block_size_bytes = bs, .head = ptr};
     return out;
 }
 

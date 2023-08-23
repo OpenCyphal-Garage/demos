@@ -15,6 +15,10 @@
 /// The application performs dynamic node-ID allocation, subscribes to a subject and publishes to another subject.
 /// Aside from that, it also publishes on the standard Heartbeat subject and responds to certain standard RPC requests.
 ///
+/// The following BPF expression can be used to filter Cyphal/UDP traffic (e.g., in Wireshark):
+///
+///     udp and dst net 239.0.0.0 mask 255.0.0.0 and dst port 9382
+///
 /// This software is distributed under the terms of the MIT License.
 /// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
 /// Copyright Amazon.com Inc. or its affiliates.
@@ -367,15 +371,17 @@ int main(const int argc, const char* const argv[])
                 // Otherwise, just drop it and move on to the next one.
                 if ((tqi->deadline_usec == 0) || (tqi->deadline_usec > monotonic_time))
                 {
-                    const ssize_t send_res =
-                        sendto(pipe->socket_fd,
-                               tqi->datagram_payload.data,
-                               tqi->datagram_payload.size,
-                               MSG_DONTWAIT,
-                               (struct sockaddr*) &(struct sockaddr_in){.sin_family = AF_INET,
-                                                                        .sin_addr   = {tqi->destination.ip_address},
-                                                                        .sin_port   = tqi->destination.udp_port},
-                               sizeof(struct sockaddr_in));
+                    // A real-time embedded system should also enforce the transmission deadline here.
+                    const ssize_t send_res = sendto(pipe->socket_fd,
+                                                    tqi->datagram_payload.data,
+                                                    tqi->datagram_payload.size,
+                                                    MSG_DONTWAIT,
+                                                    (struct sockaddr*) &(struct sockaddr_in){
+                                                        .sin_family = AF_INET,
+                                                        .sin_addr   = {htonl(tqi->destination.ip_address)},
+                                                        .sin_port   = htons(tqi->destination.udp_port),
+                                                    },
+                                                    sizeof(struct sockaddr_in));
                     if (send_res < 0)
                     {
                         if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
