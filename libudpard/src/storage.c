@@ -23,7 +23,7 @@
 ///     3.5e-7
 ///     >>> _*100
 ///     0.000035
-#define KEY_HASH_LENGTH 6U
+#define KEY_HASH_LENGTH 7U
 struct KeyHash
 {
     char hash[KEY_HASH_LENGTH + 1];  // Digits plus the null terminator.

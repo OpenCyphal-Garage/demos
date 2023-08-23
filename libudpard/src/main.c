@@ -30,6 +30,7 @@
 
 #include <udpard.h>
 #include "memory_block.h"
+#include "storage.h"
 
 // DSDL-generated types.
 #include <uavcan/node/Heartbeat_1_0.h>
@@ -155,19 +156,28 @@ static UdpardMicrosecond getMonotonicMicroseconds(void)
 /// plug-and-play node-ID allocation by uavcan.pnp.NodeIDAllocationData. The function is infallible.
 static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_])
 {
-    // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
-    // This example is a software-only node, so we store the unique-ID in a (read-only) register instead.
-    uavcan_register_Value_1_0 value = {0};
-    uavcan_register_Value_1_0_select_unstructured_(&value);
-    // Populate the default; it is only used at the first run if there is no such register.
-    for (size_t i = 0; i < uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_; i++)
+    static byte_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_];
+    static bool   initialized = false;
+    if (!initialized)
     {
-        value.unstructured.value.elements[value.unstructured.value.count++] = (uint8_t) rand();  // NOLINT
+        initialized = true;
+        // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
+        // This example is a software-only node, so we generate the UID at first launch and store it permanently.
+        static const char* const Key = ".unique_id";
+        if (!storageGet(Key, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_, uid))
+        {
+            // Populate the default; it is only used at the first run.
+            for (size_t i = 0; i < uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_; i++)
+            {
+                uid[i] = (byte_t) rand();  // NOLINT
+            }
+            if (!storagePut(Key, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_, uid))
+            {
+                abort();  // The node cannot function if the storage system is not available.
+            }
+        }
     }
-    // TODO FIXME READ THE REGISTER HERE
-    assert(uavcan_register_Value_1_0_is_unstructured_(&value) &&
-           value.unstructured.value.count == uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_);
-    memcpy(&out[0], &value.unstructured.value, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_);
+    (void) memcpy(out, uid, sizeof(uid));
 }
 
 /// Helpers for emitting transfers over all available interfaces.
