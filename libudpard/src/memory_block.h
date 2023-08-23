@@ -11,9 +11,9 @@
 
 /// This can be replaced with the standard malloc()/free(), if available.
 /// This macro is a crude substitute for the missing metaprogramming facilities in C.
-#define MEMORY_BLOCK_ALLOCATOR_DEFINE(_name, _block_size_bytes, _block_count)   \
-    static uint_least8_t        _name##_pool[_block_size_bytes * _block_count]; \
-    struct MemoryBlockAllocator _name = memoryBlockInit(sizeof(_name##_pool), &_name##_pool[0], _block_size_bytes)
+#define MEMORY_BLOCK_ALLOCATOR_DEFINE(_name, _block_size_bytes, _block_count)       \
+    static uint_least8_t        _name##_pool[(_block_size_bytes) * (_block_count)]; \
+    struct MemoryBlockAllocator _name = memoryBlockInit(sizeof(_name##_pool), &_name##_pool[0], (_block_size_bytes))
 
 struct MemoryBlockAllocator
 {

@@ -1,6 +1,7 @@
 <component name="ProjectDictionaryState">
   <dictionary name="pavel">
     <words>
+      <w>abcdefghijklmnopqrstuvwxyz</w>
       <w>baremetal</w>
       <w>cavl</w>
       <w>cfamily</w>
@@ -12,6 +13,7 @@
       <w>dsdl</w>
       <w>dudpard</w>
       <w>ffee</w>
+      <w>gettime</w>
       <w>ghcr</w>
       <w>iface</w>
       <w>ifaces</w>
@@ -28,9 +30,11 @@
       <w>nosonar</w>
       <w>opencyphal</w>
       <w>pard</w>
+      <w>perfcounters</w>
       <w>prio</w>
       <w>profraw</w>
       <w>pycyphal</w>
+      <w>sapog</w>
       <w>spdx</w>
       <w>stringmakers</w>
       <w>uavcan</w>
@@ -43,6 +47,7 @@
       <w>wconversion</w>
       <w>wextra</w>
       <w>wtype</w>
+      <w>xopen</w>
       <w>zzzzzz</w>
     </words>
   </dictionary>
