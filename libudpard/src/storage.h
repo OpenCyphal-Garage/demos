@@ -23,7 +23,8 @@
 #include <stdlib.h>
 
 /// Returns true on success, false if there is no such key, I/O error, or bad parameters.
-bool storageGet(const char* const key, const size_t size, void* const data);
+/// At entry, inout_size contains the size of the output buffer; upon return it contains the number of bytes read.
+bool storageGet(const char* const key, size_t* const inout_size, void* const data);
 
 /// Existing key will be overwritten. If there is no such key, it will be created.
 /// This function should normally be only called before the reboot when configuration changes need to be committed
@@ -33,5 +34,6 @@ bool storageGet(const char* const key, const size_t size, void* const data);
 bool storagePut(const char* const key, const size_t size, const void* const data);
 
 /// Removes the key from the storage. Does nothing if the key does not exist.
+/// This is useful when the configuration needs to be reset to the default values, or during version migration.
 /// Returns true on success, false on I/O error or bad parameters.
 bool storageDrop(const char* const key);

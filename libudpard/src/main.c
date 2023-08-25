@@ -28,6 +28,7 @@
 // For clock_gettime().
 #define _DEFAULT_SOURCE  // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
+#include "register.h"
 #include <udpard.h>
 #include "memory_block.h"
 #include "storage.h"
@@ -36,7 +37,7 @@
 #include <uavcan/node/Heartbeat_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
-#include <uavcan/_register/Access_1_0.h>
+#include <uavcan/primitive/array/Real32_1_0.h>
 
 // POSIX API.
 #include <fcntl.h>
@@ -52,9 +53,12 @@
 #include <errno.h>
 #include <time.h>
 
-/// The number of network interfaces used. LibUDPard natively supports non-redundant interfaces,
-/// doubly-redundant, and triply-redundant network interfaces for fault tolerance.
-#define IFACE_REDUNDANCY_FACTOR 2
+/// By default, only the local loopback interface is used.
+/// The connectivity can be changed after the node is launched via the register API.
+/// LibUDPard natively supports non-redundant, doubly-redundant, and triply-redundant network interfaces
+/// for fault tolerance.
+#define DEFAULT_IFACE "127.0.0.1"
+
 /// The maximum number of UDP datagrams enqueued in the TX queue at any given time.
 #define TX_QUEUE_SIZE 50
 /// The Cyphal/UDP specification recommends setting the TTL value of 16 hops.
@@ -65,7 +69,7 @@
 /// many items in the TX queue per iface or this many pending RX fragments per iface.
 /// Remember that per the LibUDPard design, there is a dedicated TX pipeline per iface and shared RX pipelines for all
 /// ifaces.
-#define RESOURCE_LIMIT_PAYLOAD_FRAGMENTS ((TX_QUEUE_SIZE * IFACE_REDUNDANCY_FACTOR) + 50)
+#define RESOURCE_LIMIT_PAYLOAD_FRAGMENTS ((TX_QUEUE_SIZE * UDPARD_NETWORK_INTERFACE_COUNT_MAX) + 50)
 /// Each remote node emitting data on a given port that we are interested in requires us to allocate a small amount
 /// of memory to keep certain state associated with that node. This is the maximum number of nodes we can handle.
 #define RESOURCE_LIMIT_SESSIONS 1024
@@ -101,7 +105,17 @@ struct Publisher
 struct Subscriber
 {
     struct UdpardRxSubscription subscription;
-    int                         socket_fd[IFACE_REDUNDANCY_FACTOR];
+    int                         socket_fd[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
+};
+
+struct ApplicationRegisters
+{
+    struct Register              node_id;           ///< uavcan.node.id             : natural16[1]
+    struct Register              node_description;  ///< uavcan.node.description    : string
+    struct Register              udp_iface;         ///< uavcan.udp.iface           : string
+    struct Register              mem_info;          ///< A simple diagnostic register for viewing the memory usage.
+    struct PublisherRegisterSet  pub_data;
+    struct SubscriberRegisterSet sub_data;
 };
 
 struct Application
@@ -112,14 +126,15 @@ struct Application
     bool restart_required;
 
     /// Common LibUDPard states.
+    uint_fast8_t         iface_count;
     UdpardNodeID         local_node_id;
-    struct TxPipeline    tx_pipeline[IFACE_REDUNDANCY_FACTOR];
+    struct TxPipeline    tx_pipeline[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
     struct RPCDispatcher rpc_dispatcher;
 
     /// The local network interface addresses to use for this node.
     /// All communications are multicast, but multicast sockets need to be bound to a specific local address to
     /// tell the OS which ports to send/receive data via.
-    struct in_addr ifaces[IFACE_REDUNDANCY_FACTOR];
+    struct in_addr ifaces[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
 
     /// Publishers.
     struct Publisher pub_heartbeat;
@@ -134,6 +149,10 @@ struct Application
     struct UdpardRxRPCPort srv_get_node_info;
     struct UdpardRxRPCPort srv_register_list;
     struct UdpardRxRPCPort srv_register_access;
+
+    /// Registers.
+    struct Register*            reg_root;  ///< The root of the register tree.
+    struct ApplicationRegisters reg;
 };
 
 /// A deeply embedded system should sample a microsecond-resolution non-overflowing 64-bit timer.
@@ -163,8 +182,9 @@ static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_AR
         initialized = true;
         // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
         // This example is a software-only node, so we generate the UID at first launch and store it permanently.
-        static const char* const Key = ".unique_id";
-        if (!storageGet(Key, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_, uid))
+        static const char* const Key  = ".unique_id";
+        size_t                   size = uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_;
+        if ((!storageGet(Key, &size, uid)) || (size != uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_))
         {
             // Populate the default; it is only used at the first run.
             for (size_t i = 0; i < uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_; i++)
@@ -187,7 +207,7 @@ static void publish(struct Application* const app,
                     const void* const         payload)
 {
     const UdpardMicrosecond deadline = getMonotonicMicroseconds() + pub->tx_timeout_usec;
-    for (size_t i = 0; i < IFACE_REDUNDANCY_FACTOR; i++)
+    for (size_t i = 0; i < app->iface_count; i++)
     {
         (void) udpardTxPublish(&app->tx_pipeline[i].udpard_tx,
                                deadline,
@@ -282,43 +302,177 @@ static int_fast32_t initTxPipeline(struct TxPipeline* const          self,
     {
         return -errno;
     }
-    if (setsockopt(self->socket_fd,
-                   IPPROTO_IP,
-                   IP_MULTICAST_IF,
-                   &(struct in_addr){.s_addr = local_iface.s_addr},
-                   sizeof(struct in_addr)) != 0)
+    if (setsockopt(self->socket_fd, IPPROTO_IP, IP_MULTICAST_IF, &local_iface, sizeof(local_iface)) != 0)
     {
         return -errno;
     }
     return 0;
 }
 
-int main(const int argc, const char* const argv[])
+static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const self)
 {
-    if (argc != (1 + IFACE_REDUNDANCY_FACTOR))
+    (void) self;
+    uavcan_register_Value_1_0 out = {0};
+    uavcan_register_Value_1_0_select_empty_(&out);
+    // TODO FIXME populate
+    return out;
+}
+
+/// Enters all registers into the tree and initializes their default value.
+/// The next step after this is to load the values from the non-volatile storage.
+static void initRegisters(struct ApplicationRegisters* const reg, struct Register** const root)
+{
+    registerInit(&reg->node_id, root, (const char*[]){"uavcan", "node", "id", NULL});
+    uavcan_register_Value_1_0_select_natural16_(&reg->node_id.value);
+    reg->node_id.value.natural16.value.count       = 1;
+    reg->node_id.value.natural16.value.elements[0] = UDPARD_NODE_ID_UNSET;
+    reg->node_id.persistent                        = true;
+    reg->node_id.remote_mutable                    = true;
+
+    registerInit(&reg->node_description, root, (const char*[]){"uavcan", "node", "description", NULL});
+    uavcan_register_Value_1_0_select_string_(&reg->node_description.value);  // Empty by default.
+    reg->node_description.persistent     = true;
+    reg->node_description.remote_mutable = true;
+
+    registerInit(&reg->udp_iface, root, (const char*[]){"uavcan", "udp", "iface", NULL});
+    uavcan_register_Value_1_0_select_string_(&reg->udp_iface.value);
+    reg->udp_iface.persistent                = true;
+    reg->udp_iface.remote_mutable            = true;
+    reg->udp_iface.value._string.value.count = strlen(DEFAULT_IFACE);
+    (void) memcpy(&reg->udp_iface.value._string.value.elements[0],
+                  DEFAULT_IFACE,
+                  reg->udp_iface.value._string.value.count);
+
+    registerInit(&reg->mem_info, root, (const char*[]){"sys", "info", "mem", NULL});
+    reg->mem_info.getter = &getRegisterSysInfoMem;
+
+    registerInitPublisher(&reg->pub_data, root, "data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
+
+    registerInitSubscriber(&reg->sub_data, root, "data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
+}
+
+/// Parse the addresses of the available local network interfaces from the given string.
+/// In a deeply embedded system this may be replaced by some other networking APIs, like LwIP.
+/// Invalid interface addresses are ignored; i.e., this is a best-effort parser.
+/// Returns the number of valid ifaces found (which may be zero).
+static uint_fast8_t parseNetworkIfaceAddresses(const uavcan_primitive_String_1_0* const in,
+                                               struct in_addr out[UDPARD_NETWORK_INTERFACE_COUNT_MAX])
+{
+    uint_fast8_t count = 0;
+    char         buf_z[uavcan_primitive_String_1_0_value_ARRAY_CAPACITY_ + 1];
+    size_t       offset = 0;
+    assert(in->value.count <= sizeof(buf_z));
+    while ((offset < in->value.count) && (count < UDPARD_NETWORK_INTERFACE_COUNT_MAX))
     {
-        (void) fprintf(stderr, "Usage: %s <iface-ip-0> <iface-ip-1> ...\n", argv[0]);
-        return 1;
-    }
-    struct Application app = {.local_node_id = UDPARD_NODE_ID_UNSET};
-    // Parse the iface addresses given via the command line. These will be used to decide which NICs to send/receive
-    // data on. The addresses are in the form of IPv4 dotted quads.
-    for (size_t i = 0; i < IFACE_REDUNDANCY_FACTOR; i++)
-    {
-        if (inet_pton(AF_INET, argv[1 + i], &app.ifaces[i]) == 0)
+        // Copy chars from "in" into "buf_z" one by one until a whitespace character is found.
+        size_t sz = 0;
+        while ((offset < in->value.count) && (sz < (sizeof(buf_z) - 1)))
         {
-            (void) fprintf(stderr, "Invalid IP address: %s\n", argv[1 + i]);
-            return 1;
+            const char c = (char) in->value.elements[offset++];
+            if ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'))
+            {
+                break;
+            }
+            buf_z[sz++] = c;
+        }
+        buf_z[sz] = '\0';
+        if (sz > 0)
+        {
+            const int      so    = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);  // Test the iface.
+            struct in_addr iface = {0};
+            if ((so >= 0) && (inet_pton(AF_INET, buf_z, &iface) == 1) &&
+                (bind(so,
+                      (struct sockaddr*) &(struct sockaddr_in){.sin_family = AF_INET, .sin_addr = iface, .sin_port = 0},
+                      sizeof(struct sockaddr_in)) != 0) &&
+                (setsockopt(so, IPPROTO_IP, IP_MULTICAST_IF, &iface, sizeof(struct in_addr)) != 0))
+            {
+                out[count++] = iface;
+            }
+            if (so >= 0)
+            {
+                (void) close(so);
+            }
         }
     }
+    return count;
+}
+
+/// This is designed for use with registerTraverse.
+/// The context points to a size_t containing the number of registers loaded.
+static void* regLoad(struct Register* const self, void* const context)
+{
+    assert((self != NULL) && (context != NULL));
+    byte_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+    size_t sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
+    // Ignore non-persistent registers and those whose values are computed dynamically (can't be stored).
+    // If the entry is not found or the stored value is invalid, the default value will be used.
+    if (self->persistent && (self->getter == NULL) && storageGet(self->name, &sr_size, &serialized[0]) &&
+        (uavcan_register_Value_1_0_deserialize_(&self->value, &serialized[0], &sr_size) >= 0))
+    {
+        ++(*(size_t*) context);
+    }
+    return NULL;
+}
+
+/// This is designed for use with registerTraverse.
+/// The context points to a size_t containing the number of registers that could not be stored.
+static void* regStore(struct Register* const self, void* const context)
+{
+    assert((self != NULL) && (context != NULL));
+    if (self->persistent && self->remote_mutable)
+    {
+        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+        size_t     sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
+        const bool ok      = (uavcan_register_Value_1_0_serialize_(&self->value, serialized, &sr_size) >= 0) &&
+                        storagePut(self->name, sr_size, &serialized[0]);
+        if (!ok)
+        {
+            ++(*(size_t*) context);
+        }
+    }
+    return NULL;
+}
+
+/// This is needed to implement node restarting. Remove this if running on an embedded system.
+extern char** environ;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+int main(const int argc, char* const argv[])
+{
+    struct Application app = {.iface_count = 0, .local_node_id = UDPARD_NODE_ID_UNSET};
+    // The first thing to do during the application initialization is to load the register values from the non-volatile
+    // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
+    // information on how to reach the network and how to publish/subscribe to the subjects of interest.
+    initRegisters(&app.reg, &app.reg_root);
+    {
+        size_t load_count = 0;
+        (void) registerTraverse(app.reg_root, &regLoad, &load_count);
+        (void) fprintf(stderr, "%zu registers loaded from the non-volatile storage\n", load_count);
+    }
+    // If we're running on a POSIX system, we can use the environment variables to override the loaded values.
+    // There is a standard mapping between environment variable names and register names documented in the DSDL
+    // definition of uavcan.register.Access; for example, "uavcan.node.id" --> "UAVCAN__NODE__ID".
+    // This simple feature is left as an exercise to the reader. It is meaningless in a deeply embedded system though.
+    //
+    //  registerTraverse(app.reg, &regOverrideFromEnvironmentVariables, NULL);
+
+    // Parse the iface addresses given via the standard iface register.
+    app.iface_count = parseNetworkIfaceAddresses(&app.reg.udp_iface.value._string, &app.ifaces[0]);
+    if (app.iface_count == 0)  // In case of error we fall back to the local loopback to keep the node reachable.
+    {
+        (void) fprintf(stderr, "Using the loopback iface because the iface register does not specify valid ifaces\n");
+        app.iface_count = 1;
+        app.ifaces[0]   = (struct in_addr){.s_addr = htonl(INADDR_LOOPBACK)};
+    }
+
     // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
     // They may change when migrating between different versions of the library or when building the code for a
     // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 400, RESOURCE_LIMIT_SESSIONS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
+
     // Initialize the TX pipelines. We have one per local iface (unlike the RX pipelines which are shared).
-    for (size_t i = 0; i < IFACE_REDUNDANCY_FACTOR; i++)
+    for (size_t i = 0; i < app.iface_count; i++)
     {
         const int_fast32_t result =
             initTxPipeline(&app.tx_pipeline[i],
@@ -333,6 +487,9 @@ int main(const int argc, const char* const argv[])
             return 1;
         }
     }
+    // Initialize the local node-ID. The register value may change at runtime; we don't want the change to take
+    // effect until the node is restarted, so we initialize the local node-ID only once at startup.
+    app.local_node_id = app.reg.node_id.value.natural16.value.elements[0];
     // Initialize the publishers. They are not dependent on the local node-ID value.
     // Heartbeat.
     app.pub_heartbeat.priority        = UdpardPriorityNominal;
@@ -342,9 +499,11 @@ int main(const int argc, const char* const argv[])
     app.pub_pnp_node_id_allocation.priority        = UdpardPrioritySlow;
     app.pub_pnp_node_id_allocation.subject_id      = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_;
     app.pub_pnp_node_id_allocation.tx_timeout_usec = 1 * MEGA;
-    // Data.
-    app.pub_data.priority        = UdpardPriorityFast;
-    app.pub_data.subject_id      = 1234;  // TODO FIXME pull the register API. NOLINT
+    // Data. This is not a fixed port-ID register, we load the values from the registers.
+    app.pub_data.priority   = (app.reg.pub_data.priority.value.natural8.value.elements[0] <= UDPARD_PRIORITY_MAX)  //
+                                  ? ((enum UdpardPriority) app.reg.pub_data.priority.value.natural8.value.elements[0])
+                                  : UdpardPriorityOptional;
+    app.pub_data.subject_id = app.reg.pub_data.base.id.value.natural16.value.elements[0];
     app.pub_data.tx_timeout_usec = 50 * KILO;
 
     // TODO
@@ -371,7 +530,7 @@ int main(const int argc, const char* const argv[])
         }
 
         // Transmit pending frames from the prioritized TX queues managed by libudpard.
-        for (size_t i = 0; i < IFACE_REDUNDANCY_FACTOR; i++)
+        for (size_t i = 0; i < app.iface_count; i++)
         {
             struct TxPipeline* const   pipe = &app.tx_pipeline[i];
             const struct UdpardTxItem* tqi  = udpardTxPeek(&pipe->udpard_tx);  // Find the highest-priority datagram.
@@ -413,5 +572,20 @@ int main(const int argc, const char* const argv[])
         usleep(1000);
     }
 
-    return 0;
+    // Save registers immediately before restarting the node.
+    // We don't access the storage during normal operation of the node because access is slow and is impossible to
+    // perform without blocking; it also introduces undesirable complexities and complicates the failure modes.
+    {
+        size_t store_errors = 0;
+        (void) registerTraverse(app.reg_root, &regStore, &store_errors);
+        if (store_errors > 0)
+        {
+            (void) fprintf(stderr, "%zu registers could not be stored\n", store_errors);
+        }
+    }
+
+    // It is recommended to postpone restart until all frames are sent though.
+    (void) argc;
+    puts("RESTART ");
+    return -execve(argv[0], argv, environ);
 }

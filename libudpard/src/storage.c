@@ -3,8 +3,9 @@
 /// Author: Pavel Kirienko <pavel@opencyphal.org>
 
 #include "storage.h"
+#include "crc64we.h"
 #include <stdio.h>
-#include <stdint.h>
+#include <string.h>
 #include <unistd.h>
 
 /// We could use key names directly, but they may be long, which leads to unnecessary storage memory consumption;
@@ -29,34 +30,13 @@ struct KeyHash
     char hash[KEY_HASH_LENGTH + 1];  // Digits plus the null terminator.
 };
 
-static uint64_t computeKeyHashValue(const char* const key)
-{
-    // In this implementation we use CRC-64/WE: http://reveng.sourceforge.net/crc-catalogue/17plus.htm#crc.cat-bits.64
-    static const uint64_t Poly       = 0x42F0E1EBA9EA3693ULL;
-    static const uint64_t Mask       = 1ULL << 63U;
-    static const uint64_t InputShift = 56U;
-    static const uint64_t OctetWidth = 8U;
-    uint64_t              hash       = UINT64_MAX;
-    const unsigned char*  ptr        = (const unsigned char*) key;
-    while (*ptr != 0)
-    {
-        hash ^= (uint64_t) (*ptr) << InputShift;
-        ++ptr;
-        for (uint_fast8_t i = 0; i < OctetWidth; i++)
-        {
-            hash = ((hash & Mask) != 0) ? ((hash << 1U) ^ Poly) : (hash << 1U);
-        }
-    }
-    return hash;
-}
-
 static struct KeyHash computeKeyHash(const char* const key)
 {
     static const char     Alphabet[] = "0123456789"
                                        "abcdefghijklmnopqrstuvwxyz"
                                        "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     static const uint64_t Radix      = sizeof(Alphabet) - 1U;
-    uint64_t              value      = computeKeyHashValue(key);
+    uint64_t              value      = crc64weString(key);
     size_t                index      = 0;
     struct KeyHash        out        = {.hash = {0}};  // The hash contains the digits in reverse order.
     do
@@ -70,21 +50,32 @@ static struct KeyHash computeKeyHash(const char* const key)
 
 static FILE* keyOpen(const char* const key, const bool write)
 {
-    return fopen(&computeKeyHash(key).hash[0], write ? "wb" : "rb");
+    char path[KEY_HASH_LENGTH + 4 + 1];  // Hash + extension + null terminator.
+    (void) memcpy(&path[0], &computeKeyHash(key).hash[0], KEY_HASH_LENGTH);
+    (void) memcpy(&path[KEY_HASH_LENGTH], ".cfg", 4);
+    path[sizeof(path) - 1] = '\0';
+    return fopen(&path[0], write ? "wb" : "rb");
 }
 
-bool storageGet(const char* const key, const size_t size, void* const data)
+bool storageGet(const char* const key, size_t* const inout_size, void* const data)
 {
     bool result = false;
-    if ((key != NULL) && (data != NULL))
+    if ((key != NULL) && (inout_size != NULL) && (data != NULL))
     {
         FILE* const fp = keyOpen(key, false);
         if (fp != NULL)
         {
-            result = (fread(data, 1U, size, fp) == size) && (ferror(fp) == 0);
+            *inout_size = fread(data, 1U, *inout_size, fp);
+            result      = (ferror(fp) == 0);
             (void) fclose(fp);
         }
     }
+    (void) fprintf(stderr,
+                   "storageGet(%s, %zu, %p) -> %s\n",
+                   key,
+                   (inout_size == NULL) ? 0 : (*inout_size),
+                   data,
+                   result ? "YES" : "NO");
     return result;
 }
 
@@ -100,6 +91,7 @@ bool storagePut(const char* const key, const size_t size, const void* const data
             (void) fclose(fp);
         }
     }
+    (void) fprintf(stderr, "storagePut(%s, %zu, %p) -> %s\n", key, size, data, result ? "YES" : "NO");
     return result;
 }
 
