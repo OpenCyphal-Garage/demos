@@ -70,12 +70,14 @@ bool storageGet(const char* const key, size_t* const inout_size, void* const dat
             (void) fclose(fp);
         }
     }
+#if 0
     (void) fprintf(stderr,
                    "storageGet(%s, %zu, %p) -> %s\n",
                    key,
                    (inout_size == NULL) ? 0 : (*inout_size),
                    data,
                    result ? "YES" : "NO");
+#endif
     return result;
 }
 
@@ -91,7 +93,9 @@ bool storagePut(const char* const key, const size_t size, const void* const data
             (void) fclose(fp);
         }
     }
+#if 0
     (void) fprintf(stderr, "storagePut(%s, %zu, %p) -> %s\n", key, size, data, result ? "YES" : "NO");
+#endif
     return result;
 }
 

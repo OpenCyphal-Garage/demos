@@ -75,7 +75,13 @@ add_library(udpard_demo STATIC ${submodules}/libudpard/libudpard/udpard.c)
 target_include_directories(udpard_demo INTERFACE SYSTEM ${submodules}/libudpard/libudpard)
 
 # Define the demo application build target and link it with the library.
-add_executable(demo ${CMAKE_SOURCE_DIR}/src/main.c ${CMAKE_SOURCE_DIR}/src/storage.c ${CMAKE_SOURCE_DIR}/src/register.c)
+add_executable(
+        demo
+        ${CMAKE_SOURCE_DIR}/src/main.c
+        ${CMAKE_SOURCE_DIR}/src/storage.c
+        ${CMAKE_SOURCE_DIR}/src/register.c
+        ${CMAKE_SOURCE_DIR}/src/udp.c
+)
 target_include_directories(demo PRIVATE ${submodules}/cavl)
 target_link_libraries(demo PRIVATE udpard_demo)
 add_dependencies(demo dsdl_uavcan dsdl_reg)

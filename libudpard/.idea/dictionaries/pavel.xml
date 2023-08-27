@@ -12,11 +12,13 @@
       <w>dscp</w>
       <w>dsdl</w>
       <w>dudpard</w>
+      <w>execve</w>
       <w>ffee</w>
       <w>gettime</w>
       <w>ghcr</w>
       <w>iface</w>
       <w>ifaces</w>
+      <w>inaddr</w>
       <w>intravehicular</w>
       <w>kirienko</w>
       <w>libcanard</w>
@@ -35,6 +37,8 @@
       <w>prio</w>
       <w>profraw</w>
       <w>pycyphal</w>
+      <w>recv</w>
+      <w>reuseport</w>
       <w>sapog</w>
       <w>spdx</w>
       <w>stringmakers</w>

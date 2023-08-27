@@ -8,9 +8,6 @@
 #include "crc64we.h"
 #include <assert.h>
 
-#define DEFAULT_PORT_ID UINT16_MAX
-#define DEFAULT_PRIORITY 4
-
 static int_fast8_t treeSearchHash(void* const user_reference, const struct Cavl* const node)
 {
     const uint64_t lhs = *(const uint64_t*) user_reference;
@@ -58,56 +55,6 @@ void registerInit(struct Register* const  self,
     cavlRemove((Cavl**) root, cavlSearch((Cavl**) root, self, &treeSearchReg, NULL));
     const Cavl* const res = cavlSearch((Cavl**) root, self, &treeSearchReg, &treeFactory);
     assert(res == &self->base);
-}
-
-static void initPort(struct PortRegisterSet* const self,
-                     struct Register** const       root,
-                     const char* const             prefix,
-                     const char* const             port_name,
-                     const char* const             port_type)
-{
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
-    (void) memset(self, 0, sizeof(*self));
-
-    registerInit(&self->id, root, (const char*[]){"uavcan", prefix, port_name, "id", NULL});
-    uavcan_register_Value_1_0_select_natural16_(&self->id.value);
-    self->id.value.natural16.value.count       = 1;
-    self->id.value.natural16.value.elements[0] = DEFAULT_PORT_ID;
-    self->id.persistent                        = true;
-    self->id.remote_mutable                    = true;
-
-    registerInit(&self->type, root, (const char*[]){"uavcan", prefix, port_name, "type", NULL});
-    uavcan_register_Value_1_0_select_string_(&self->type.value);
-    self->type.value._string.value.count = strlen(port_type);
-    (void) memcpy(&self->type.value._string.value.elements[0], port_type, self->type.value._string.value.count);
-    self->type.persistent = true;
-}
-
-void registerInitPublisher(struct PublisherRegisterSet* const self,
-                           struct Register** const            root,
-                           const char* const                  port_name,
-                           const char* const                  port_type)
-{
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
-    (void) memset(self, 0, sizeof(*self));
-    initPort(&self->base, root, "pub", port_name, port_type);
-
-    registerInit(&self->priority, root, (const char*[]){"uavcan", "pub", port_name, "prio", NULL});
-    uavcan_register_Value_1_0_select_natural8_(&self->priority.value);
-    self->priority.value.natural8.value.count       = 1;
-    self->priority.value.natural8.value.elements[0] = DEFAULT_PRIORITY;
-    self->priority.persistent                       = true;
-    self->priority.remote_mutable                   = true;
-}
-
-void registerInitSubscriber(struct SubscriberRegisterSet* const self,
-                            struct Register** const             root,
-                            const char* const                   port_name,
-                            const char* const                   port_type)
-{
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
-    (void) memset(self, 0, sizeof(*self));
-    initPort(&self->base, root, "sub", port_name, port_type);
 }
 
 // NOLINTNEXTLINE(*-no-recursion)

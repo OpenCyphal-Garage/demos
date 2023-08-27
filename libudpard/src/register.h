@@ -1,3 +1,20 @@
+///                            ____                   ______            __          __
+///                           / __ `____  ___  ____  / ____/_  ______  / /_  ____  / /
+///                          / / / / __ `/ _ `/ __ `/ /   / / / / __ `/ __ `/ __ `/ /
+///                         / /_/ / /_/ /  __/ / / / /___/ /_/ / /_/ / / / / /_/ / /
+///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
+///                             /_/                     /____/_/
+///
+/// In Cyphal, registers are named values that can be read and possibly written over the network. They are used
+/// extensively to configure the application and to expose its states to the network. This module provides one
+/// possible implementation of the Cyphal register API. Since the implementation of the register API does not
+/// affect wire compatibility, the Cyphal Specification does not mandate any particular approach; as such,
+/// other applications may approach the same problem differently.
+///
+/// This design is based on an AVL tree indexed by the CRC-64/WE hash of the register name. The tree is used
+/// to quickly find the register by name in logarithmic time. The tree is also traversed in the index order to
+/// implement the index-based access.
+///
 /// This software is distributed under the terms of the MIT License.
 /// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
 /// Copyright Amazon.com Inc. or its affiliates.
@@ -21,7 +38,7 @@ struct Register
     uint64_t name_hash;
 
     /// The metadata fields are mostly useful when serving remote access requests.
-    bool persistent;      ///< The value is stored in non-volatile memory.
+    bool persistent;      ///< The value is stored in non-volatile memory. The application is responsible for that.
     bool remote_mutable;  ///< The value can be changed over the network.
 
     /// The type of the value shall not change after initialization (see the registry API specification).
@@ -29,23 +46,6 @@ struct Register
     uavcan_register_Value_1_0 value;
     /// If getter is non-NULL, the value will be obtained through this callback instead of the value field.
     uavcan_register_Value_1_0 (*getter)(struct Register*);
-};
-
-/// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
-/// The value types are enforced by the implementation, so the application can rely on that.
-struct PortRegisterSet
-{
-    struct Register id;    ///< uavcan.(pub|sub|cln|srv).PORT_NAME.id      : natural16[1]
-    struct Register type;  ///< uavcan.(pub|sub|cln|srv).PORT_NAME.type    : string
-};
-struct PublisherRegisterSet
-{
-    struct PortRegisterSet base;
-    struct Register        priority;  ///< uavcan.(pub|sub|cln|srv).PORT_NAME.prio    : natural8[1]
-};
-struct SubscriberRegisterSet
-{
-    struct PortRegisterSet base;
 };
 
 /// Inserts the register into the tree. The caller must initialize the value/getter fields after this call.
@@ -62,16 +62,6 @@ void registerInit(struct Register* const  self,
                   struct Register** const root,
                   const char** const      null_terminated_name_fragments);
 
-void registerInitPublisher(struct PublisherRegisterSet* const self,
-                           struct Register** const            root,
-                           const char* const                  port_name,
-                           const char* const                  port_type);
-
-void registerInitSubscriber(struct SubscriberRegisterSet* const self,
-                            struct Register** const             root,
-                            const char* const                   port_name,
-                            const char* const                   port_type);
-
 /// Traverse all registers in their index order, invoke the functor on each.
 /// The user reference will be passed to the functor as-is.
 /// Traversal will stop either when all registers are traversed or when the functor returns non-NULL.
@@ -81,7 +71,8 @@ void* registerTraverse(struct Register* const root,
                        void* const user_reference);
 
 /// These search functions are needed to implement the Cyphal register API.
-/// The name length is provided to simplify coupling with the DSDL-generated code.
+/// The name length is provided to simplify coupling with the DSDL-generated code; the name does not have to be
+/// null-terminated.
 /// Returns NULL if not found or the arguments are invalid.
 struct Register* registerFindByName(struct Register* const root, const size_t name_length, const char* const name);
 struct Register* registerFindByIndex(struct Register* const root, const size_t index);

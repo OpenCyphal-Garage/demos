@@ -1,3 +1,13 @@
+///                            ____                   ______            __          __
+///                           / __ `____  ___  ____  / ____/_  ______  / /_  ____  / /
+///                          / / / / __ `/ _ `/ __ `/ /   / / / / __ `/ __ `/ __ `/ /
+///                         / /_/ / /_/ /  __/ / / / /___/ /_/ / /_/ / / / / /_/ / /
+///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
+///                             /_/                     /____/_/
+///
+/// A simple implementation of the CRC-64/WE hash function. For details, please refer to
+/// http://reveng.sourceforge.net/crc-catalogue/17plus.htm#crc.cat-bits.64
+///
 /// This software is distributed under the terms of the MIT License.
 /// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
 /// Copyright Amazon.com Inc. or its affiliates.
@@ -7,10 +17,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
-/// CRC-64/WE, see http://reveng.sourceforge.net/crc-catalogue/17plus.htm#crc.cat-bits.64
 static inline uint64_t crc64we(const size_t size, const void* const data)
 {
     static const uint64_t Poly       = 0x42F0E1EBA9EA3693ULL;

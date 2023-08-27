@@ -29,9 +29,10 @@
 #define _DEFAULT_SOURCE  // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
 
 #include "register.h"
-#include <udpard.h>
 #include "memory_block.h"
 #include "storage.h"
+#include "udp.h"
+#include <udpard.h>
 
 // DSDL-generated types.
 #include <uavcan/node/Heartbeat_1_0.h>
@@ -40,10 +41,7 @@
 #include <uavcan/primitive/array/Real32_1_0.h>
 
 // POSIX API.
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <unistd.h>  // execve
 
 // Standard library.
 #include <stdio.h>
@@ -83,7 +81,7 @@ typedef uint_least8_t byte_t;
 struct TxPipeline
 {
     struct UdpardTx udpard_tx;
-    int             socket_fd;
+    UDPTxHandle     io;
 };
 
 /// There is one RPC dispatcher in the entire application. It aggregates all RX RPC ports for all network ifaces.
@@ -91,7 +89,7 @@ struct TxPipeline
 struct RPCDispatcher
 {
     struct UdpardRxRPCDispatcher udpard_rpc_dispatcher;
-    int                          socket_fd;
+    UDPRxHandle                  io;
 };
 
 struct Publisher
@@ -105,7 +103,24 @@ struct Publisher
 struct Subscriber
 {
     struct UdpardRxSubscription subscription;
-    int                         socket_fd[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
+    UDPRxHandle                 io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
+    bool                        enabled;  ///< True if in use.
+};
+
+/// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
+struct PortRegisterSet
+{
+    struct Register id;    ///< uavcan.(pub|sub|cln|srv).PORT_NAME.id      : natural16[1]
+    struct Register type;  ///< uavcan.(pub|sub|cln|srv).PORT_NAME.type    : string
+};
+struct PublisherRegisterSet
+{
+    struct PortRegisterSet base;
+    struct Register        priority;  ///< uavcan.(pub|sub|cln|srv).PORT_NAME.prio    : natural8[1]
+};
+struct SubscriberRegisterSet
+{
+    struct PortRegisterSet base;
 };
 
 struct ApplicationRegisters
@@ -125,6 +140,11 @@ struct Application
     /// This flag is raised when the node is requested to restart.
     bool restart_required;
 
+    /// Memory allocators.
+    struct UdpardMemoryResource memory_session;
+    struct UdpardMemoryResource memory_fragment;
+    struct UdpardMemoryResource memory_payload;
+
     /// Common LibUDPard states.
     uint_fast8_t         iface_count;
     UdpardNodeID         local_node_id;
@@ -134,16 +154,16 @@ struct Application
     /// The local network interface addresses to use for this node.
     /// All communications are multicast, but multicast sockets need to be bound to a specific local address to
     /// tell the OS which ports to send/receive data via.
-    struct in_addr ifaces[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
+    uint32_t ifaces[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
 
     /// Publishers.
     struct Publisher pub_heartbeat;
     struct Publisher pub_pnp_node_id_allocation;
-    struct Publisher pub_data;
+    struct Publisher pub_data;  // uavcan_primitive_array_Real32_1_0
 
     /// Subscribers.
     struct Subscriber sub_pnp_node_id_allocation;
-    struct Subscriber sub_data;
+    struct Subscriber sub_data;  // uavcan_primitive_array_Real32_1_0
 
     /// RPC servers.
     struct UdpardRxRPCPort srv_get_node_info;
@@ -198,6 +218,56 @@ static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_AR
         }
     }
     (void) memcpy(out, uid, sizeof(uid));
+}
+
+static void regInitPort(struct PortRegisterSet* const self,
+                        struct Register** const       root,
+                        const char* const             prefix,
+                        const char* const             port_name,
+                        const char* const             port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+
+    registerInit(&self->id, root, (const char*[]){"uavcan", prefix, port_name, "id", NULL});
+    uavcan_register_Value_1_0_select_natural16_(&self->id.value);
+    self->id.value.natural16.value.count       = 1;
+    self->id.value.natural16.value.elements[0] = UINT16_MAX;
+    self->id.persistent                        = true;
+    self->id.remote_mutable                    = true;
+
+    registerInit(&self->type, root, (const char*[]){"uavcan", prefix, port_name, "type", NULL});
+    uavcan_register_Value_1_0_select_string_(&self->type.value);
+    self->type.value._string.value.count = strlen(port_type);
+    (void) memcpy(&self->type.value._string.value.elements[0], port_type, self->type.value._string.value.count);
+    self->type.persistent = true;
+}
+
+static void regInitPublisher(struct PublisherRegisterSet* const self,
+                             struct Register** const            root,
+                             const char* const                  port_name,
+                             const char* const                  port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+    regInitPort(&self->base, root, "pub", port_name, port_type);
+
+    registerInit(&self->priority, root, (const char*[]){"uavcan", "pub", port_name, "prio", NULL});
+    uavcan_register_Value_1_0_select_natural8_(&self->priority.value);
+    self->priority.value.natural8.value.count       = 1;
+    self->priority.value.natural8.value.elements[0] = UdpardPriorityNominal;
+    self->priority.persistent                       = true;
+    self->priority.remote_mutable                   = true;
+}
+
+static void regInitSubscriber(struct SubscriberRegisterSet* const self,
+                              struct Register** const             root,
+                              const char* const                   port_name,
+                              const char* const                   port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+    regInitPort(&self->base, root, "sub", port_name, port_type);
 }
 
 /// Helpers for emitting transfers over all available interfaces.
@@ -271,42 +341,49 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
     // TODO FIXME
 }
 
-/// Sets up the instance of UdpardTx and configures the socket for it. Returns negative on error.
-static int_fast32_t initTxPipeline(struct TxPipeline* const          self,
-                                   const UdpardNodeID* const         local_node_id,
-                                   const struct UdpardMemoryResource memory,
-                                   const struct in_addr              local_iface)
+/// Invalid subject-ID is not considered an error but rather as a disabled publisher.
+/// The application needs to check whether the subject-ID is valid before publishing.
+static void initPublisher(struct Publisher* const self,
+                          const uint8_t           priority,
+                          const uint16_t          subject_id,
+                          const UdpardMicrosecond tx_timeout_usec)
 {
-    if (0 != udpardTxInit(&self->udpard_tx, local_node_id, TX_QUEUE_SIZE, memory))
+    (void) memset(self, 0, sizeof(*self));
+    self->priority   = (priority <= UDPARD_PRIORITY_MAX) ? ((enum UdpardPriority) priority) : UdpardPriorityOptional;
+    self->subject_id = subject_id;
+    self->tx_timeout_usec = tx_timeout_usec;
+}
+
+/// Returns negative error code on failure.
+static int16_t initSubscriber(struct Subscriber* const             self,
+                              const UdpardPortID                   subject_id,
+                              const size_t                         extent,
+                              const struct UdpardRxMemoryResources memory,
+                              const size_t                         iface_count,
+                              const uint32_t* const                ifaces)
+{
+    (void) memset(self, 0, sizeof(*self));
+    self->enabled = subject_id <= UDPARD_SUBJECT_ID_MAX;
+    int16_t res   = 0;
+    if (self->enabled)
     {
-        return -EINVAL;
+        res = (int16_t) udpardRxSubscriptionInit(&self->subscription, subject_id, extent, memory);
+        if (res >= 0)
+        {
+            for (size_t i = 0; i < iface_count; i++)
+            {
+                res = udpRxInit(&self->io[i],
+                                ifaces[i],
+                                self->subscription.udp_ip_endpoint.ip_address,
+                                self->subscription.udp_ip_endpoint.udp_port);
+                if (res < 0)
+                {
+                    break;
+                }
+            }
+        }
     }
-    // Set up the TX socket for this iface.
-    self->socket_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (self->socket_fd < 0)
-    {
-        return -errno;
-    }
-    if (bind(self->socket_fd,
-             (struct sockaddr*) &(struct sockaddr_in){.sin_family = AF_INET, .sin_addr = local_iface, .sin_port = 0},
-             sizeof(struct sockaddr_in)) != 0)
-    {
-        return -errno;
-    }
-    if (fcntl(self->socket_fd, F_SETFL, O_NONBLOCK) != 0)
-    {
-        return -errno;
-    }
-    const int ttl = UDP_TTL;
-    if (setsockopt(self->socket_fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) != 0)
-    {
-        return -errno;
-    }
-    if (setsockopt(self->socket_fd, IPPROTO_IP, IP_MULTICAST_IF, &local_iface, sizeof(local_iface)) != 0)
-    {
-        return -errno;
-    }
-    return 0;
+    return res;
 }
 
 static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const self)
@@ -346,9 +423,9 @@ static void initRegisters(struct ApplicationRegisters* const reg, struct Registe
     registerInit(&reg->mem_info, root, (const char*[]){"sys", "info", "mem", NULL});
     reg->mem_info.getter = &getRegisterSysInfoMem;
 
-    registerInitPublisher(&reg->pub_data, root, "data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
+    regInitPublisher(&reg->pub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
 
-    registerInitSubscriber(&reg->sub_data, root, "data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
+    regInitSubscriber(&reg->sub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
 }
 
 /// Parse the addresses of the available local network interfaces from the given string.
@@ -356,7 +433,7 @@ static void initRegisters(struct ApplicationRegisters* const reg, struct Registe
 /// Invalid interface addresses are ignored; i.e., this is a best-effort parser.
 /// Returns the number of valid ifaces found (which may be zero).
 static uint_fast8_t parseNetworkIfaceAddresses(const uavcan_primitive_String_1_0* const in,
-                                               struct in_addr out[UDPARD_NETWORK_INTERFACE_COUNT_MAX])
+                                               uint32_t out[UDPARD_NETWORK_INTERFACE_COUNT_MAX])
 {
     uint_fast8_t count = 0;
     char         buf_z[uavcan_primitive_String_1_0_value_ARRAY_CAPACITY_ + 1];
@@ -378,19 +455,10 @@ static uint_fast8_t parseNetworkIfaceAddresses(const uavcan_primitive_String_1_0
         buf_z[sz] = '\0';
         if (sz > 0)
         {
-            const int      so    = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);  // Test the iface.
-            struct in_addr iface = {0};
-            if ((so >= 0) && (inet_pton(AF_INET, buf_z, &iface) == 1) &&
-                (bind(so,
-                      (struct sockaddr*) &(struct sockaddr_in){.sin_family = AF_INET, .sin_addr = iface, .sin_port = 0},
-                      sizeof(struct sockaddr_in)) != 0) &&
-                (setsockopt(so, IPPROTO_IP, IP_MULTICAST_IF, &iface, sizeof(struct in_addr)) != 0))
+            const uint32_t iface = udpParseIfaceAddress(buf_z);
+            if (iface > 0)
             {
                 out[count++] = iface;
-            }
-            if (so >= 0)
-            {
-                (void) close(so);
             }
         }
     }
@@ -438,7 +506,26 @@ extern char** environ;  // NOLINT(cppcoreguidelines-avoid-non-const-global-varia
 
 int main(const int argc, char* const argv[])
 {
-    struct Application app = {.iface_count = 0, .local_node_id = UDPARD_NODE_ID_UNSET};
+    // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
+    // They may change when migrating between different versions of the library or when building the code for a
+    // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 400, RESOURCE_LIMIT_SESSIONS);
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
+
+    struct Application app = {
+        .memory_session  = {.user_reference = &mem_session,
+                            .allocate       = &memoryBlockAllocate,
+                            .deallocate     = &memoryBlockDeallocate},
+        .memory_fragment = {.user_reference = &mem_fragment,
+                            .allocate       = &memoryBlockAllocate,
+                            .deallocate     = &memoryBlockDeallocate},
+        .memory_payload  = {.user_reference = &mem_payload,
+                            .allocate       = &memoryBlockAllocate,
+                            .deallocate     = &memoryBlockDeallocate},
+        .iface_count     = 0,
+        .local_node_id   = UDPARD_NODE_ID_UNSET,
+    };
     // The first thing to do during the application initialization is to load the register values from the non-volatile
     // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
     // information on how to reach the network and how to publish/subscribe to the subjects of interest.
@@ -461,56 +548,72 @@ int main(const int argc, char* const argv[])
     {
         (void) fprintf(stderr, "Using the loopback iface because the iface register does not specify valid ifaces\n");
         app.iface_count = 1;
-        app.ifaces[0]   = (struct in_addr){.s_addr = htonl(INADDR_LOOPBACK)};
+        app.ifaces[0]   = udpParseIfaceAddress(DEFAULT_IFACE);
+        assert(app.ifaces[0] > 0);
     }
-
-    // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
-    // They may change when migrating between different versions of the library or when building the code for a
-    // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
-    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 400, RESOURCE_LIMIT_SESSIONS);
-    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
-    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
     // Initialize the TX pipelines. We have one per local iface (unlike the RX pipelines which are shared).
     for (size_t i = 0; i < app.iface_count; i++)
     {
-        const int_fast32_t result =
-            initTxPipeline(&app.tx_pipeline[i],
-                           &app.local_node_id,
-                           (struct UdpardMemoryResource){.user_reference = &mem_payload,  // Shared pool.
-                                                         .allocate       = &memoryBlockAllocate,
-                                                         .deallocate     = &memoryBlockDeallocate},
-                           app.ifaces[i]);
-        if (result < 0)
+        if ((0 != udpardTxInit(&app.tx_pipeline[i].udpard_tx, &app.local_node_id, TX_QUEUE_SIZE, app.memory_payload)) ||
+            (0 != udpTxInit(&app.tx_pipeline[i].io, app.ifaces[i])))
         {
-            (void) fprintf(stderr, "Failed to initialize TX pipeline for iface %zu: %li\n", i, -result);
+            (void) fprintf(stderr, "Failed to initialize TX pipeline for iface %zu\n", i);
             return 1;
         }
     }
+
     // Initialize the local node-ID. The register value may change at runtime; we don't want the change to take
     // effect until the node is restarted, so we initialize the local node-ID only once at startup.
     app.local_node_id = app.reg.node_id.value.natural16.value.elements[0];
-    // Initialize the publishers. They are not dependent on the local node-ID value.
-    // Heartbeat.
-    app.pub_heartbeat.priority        = UdpardPriorityNominal;
-    app.pub_heartbeat.subject_id      = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_;
-    app.pub_heartbeat.tx_timeout_usec = 1 * MEGA;
-    // PnP node-ID allocation.
-    app.pub_pnp_node_id_allocation.priority        = UdpardPrioritySlow;
-    app.pub_pnp_node_id_allocation.subject_id      = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_;
-    app.pub_pnp_node_id_allocation.tx_timeout_usec = 1 * MEGA;
-    // Data. This is not a fixed port-ID register, we load the values from the registers.
-    app.pub_data.priority   = (app.reg.pub_data.priority.value.natural8.value.elements[0] <= UDPARD_PRIORITY_MAX)  //
-                                  ? ((enum UdpardPriority) app.reg.pub_data.priority.value.natural8.value.elements[0])
-                                  : UdpardPriorityOptional;
-    app.pub_data.subject_id = app.reg.pub_data.base.id.value.natural16.value.elements[0];
-    app.pub_data.tx_timeout_usec = 50 * KILO;
 
-    // TODO
-    (void) mem_session;
-    (void) mem_fragment;
+    // Initialize the publishers. They are not dependent on the local node-ID value.
+    initPublisher(&app.pub_heartbeat, UdpardPriorityNominal, uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_, 1 * MEGA);
+    initPublisher(&app.pub_pnp_node_id_allocation,
+                  UdpardPrioritySlow,
+                  uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
+                  1 * MEGA);
+    initPublisher(&app.pub_data,
+                  app.reg.pub_data.priority.value.natural8.value.elements[0],
+                  app.reg.pub_data.priority.value.natural16.value.elements[0],
+                  50 * KILO);
+
+    // Initialize the subscribers. They are not dependent on the local node-ID value.
+    const struct UdpardRxMemoryResources rx_memory = {
+        .session  = app.memory_session,
+        .fragment = app.memory_fragment,
+        .payload  = {.user_reference = app.memory_payload.user_reference, .deallocate = app.memory_payload.deallocate},
+    };
+    {
+        const int16_t res = initSubscriber(&app.sub_pnp_node_id_allocation,
+                                           uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
+                                           uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_,
+                                           rx_memory,
+                                           app.iface_count,
+                                           &app.ifaces[0]);
+        if (res < 0)
+        {
+            (void) fprintf(stderr, "Failed to subscribe to uavcan.pnp.NodeIDAllocationData.2: %i\n", res);
+            return 1;
+        }
+        assert(app.sub_pnp_node_id_allocation.enabled);
+    }
+    {
+        const int16_t res = initSubscriber(&app.sub_data,
+                                           app.reg.sub_data.base.id.value.natural16.value.elements[0],
+                                           uavcan_primitive_array_Real32_1_0_EXTENT_BYTES_,
+                                           rx_memory,
+                                           app.iface_count,
+                                           &app.ifaces[0]);
+        if (res < 0)
+        {
+            (void) fprintf(stderr, "Failed to subscribe to my_data: %i\n", res);
+            return 1;
+        }
+    }
 
     // Main loop.
+    (void) fprintf(stderr, "RUNNING\n");
     app.started_at                       = getMonotonicMicroseconds();
     UdpardMicrosecond next_1_hz_iter_at  = app.started_at + MEGA;
     UdpardMicrosecond next_01_hz_iter_at = app.started_at + (MEGA * 10);
@@ -540,25 +643,18 @@ int main(const int argc, char* const argv[])
                 // Otherwise, just drop it and move on to the next one.
                 if ((tqi->deadline_usec == 0) || (tqi->deadline_usec > monotonic_time))
                 {
-                    // A real-time embedded system should also enforce the transmission deadline here.
-                    const ssize_t send_res = sendto(pipe->socket_fd,
-                                                    tqi->datagram_payload.data,
-                                                    tqi->datagram_payload.size,
-                                                    MSG_DONTWAIT,
-                                                    (struct sockaddr*) &(struct sockaddr_in){
-                                                        .sin_family = AF_INET,
-                                                        .sin_addr   = {htonl(tqi->destination.ip_address)},
-                                                        .sin_port   = htons(tqi->destination.udp_port),
-                                                    },
-                                                    sizeof(struct sockaddr_in));
+                    const int16_t send_res = udpTxSend(&pipe->io,
+                                                       tqi->destination.ip_address,
+                                                       tqi->destination.udp_port,
+                                                       tqi->datagram_payload.size,
+                                                       tqi->datagram_payload.data);
+                    if (send_res == 0)
+                    {
+                        break;  // Socket no longer writable, stop sending for now to retry later.
+                    }
                     if (send_res < 0)
                     {
-                        if ((errno == EAGAIN) || (errno == EWOULDBLOCK))
-                        {
-                            break;  // No more space in the TX buffer, try again later.
-                        }
-                        (void) fprintf(stderr, "Iface #%zu send error: %i [%s]\n", i, errno, strerror(errno));
-                        // Datagram will be discarded.
+                        (void) fprintf(stderr, "Iface #%zu send error: %i\n", i, errno);
                     }
                 }
                 udpardTxFree(pipe->udpard_tx.memory, udpardTxPop(&pipe->udpard_tx, tqi));
@@ -586,6 +682,6 @@ int main(const int argc, char* const argv[])
 
     // It is recommended to postpone restart until all frames are sent though.
     (void) argc;
-    puts("RESTART ");
+    (void) fprintf(stderr, "\nRESTART\n");
     return -execve(argv[0], argv, environ);
 }
