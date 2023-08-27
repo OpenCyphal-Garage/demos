@@ -190,7 +190,7 @@ int16_t udpWait(const uint64_t        timeout_usec,
                 UDPRxAwaitable* const rx)
 {
     int16_t res = -EINVAL;
-    if ((tx_count > 0) && (tx != NULL) && (rx_count > 0) && (rx != NULL))
+    if ((tx != NULL) && (rx != NULL) && ((tx_count + rx_count) > 0))
     {
         struct pollfd fds[tx_count + rx_count];  // Violates MISRA-C:2012 Rule 18.8; replace with a fixed limit.
         {

@@ -78,17 +78,18 @@ void udpRxClose(UDPRxHandle* const self);
 
 /// Auxiliary types for use with the I/O multiplexing function.
 /// The "ready" flag is updated to indicate whether the handle is ready for I/O.
+/// The "user_*" fields can be used for user-defined purposes.
 typedef struct
 {
     const UDPTxHandle* handle;
-    void*              user_reference;
     bool               ready;
+    void*              user_reference;
 } UDPTxAwaitable;
 typedef struct
 {
     const UDPRxHandle* handle;
-    void*              user_reference;
     bool               ready;
+    void*              user_reference;
 } UDPRxAwaitable;
 
 /// Suspend execution until the expiration of the timeout (in microseconds) or until any of the specified handles

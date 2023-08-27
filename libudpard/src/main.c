@@ -59,8 +59,8 @@
 
 /// The maximum number of UDP datagrams enqueued in the TX queue at any given time.
 #define TX_QUEUE_SIZE 50
-/// The Cyphal/UDP specification recommends setting the TTL value of 16 hops.
-#define UDP_TTL 16
+/// Maximum expected incoming datagram size.
+#define RX_BUFFER_SIZE 2000
 
 /// This is used for sizing the memory pools for dynamic memory management.
 /// We use a shared pool for both TX queues and for the RX buffers; the edge case is that we can have up to this
@@ -100,11 +100,17 @@ struct Publisher
     UdpardTransferID    transfer_id;
 };
 
+struct Subscriber;
+typedef void (*SubscriberCallback)(struct Subscriber* const self, struct UdpardRxTransfer* const transfer);
 struct Subscriber
 {
     struct UdpardRxSubscription subscription;
     UDPRxHandle                 io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
     bool                        enabled;  ///< True if in use.
+    /// The caller will free the transfer payload after this callback returns.
+    /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
+    /// it can erase the payload pointers from the transfer object.
+    SubscriberCallback handler;
 };
 
 /// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
@@ -289,6 +295,20 @@ static void publish(struct Application* const app,
     }
 }
 
+static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
+{
+    (void) self;
+    (void) transfer;
+    // TODO FIXME
+}
+
+static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
+{
+    (void) self;
+    (void) transfer;
+    // TODO FIXME
+}
+
 /// Invoked every second.
 static void handle1HzLoop(struct Application* const app, const UdpardMicrosecond monotonic_time)
 {
@@ -341,6 +361,144 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
     // TODO FIXME
 }
 
+static void pollTx(const UdpardMicrosecond time_usec, const size_t iface_count, struct TxPipeline* const tx_pipelines)
+{
+    for (size_t i = 0; i < iface_count; i++)
+    {
+        struct TxPipeline* const   pipe = &tx_pipelines[i];
+        const struct UdpardTxItem* tqi  = udpardTxPeek(&pipe->udpard_tx);  // Find the highest-priority datagram.
+        while (tqi != NULL)
+        {
+            // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
+            // Otherwise, just drop it and move on to the next one.
+            if ((tqi->deadline_usec == 0) || (tqi->deadline_usec > time_usec))
+            {
+                const int16_t send_res = udpTxSend(&pipe->io,
+                                                   tqi->destination.ip_address,
+                                                   tqi->destination.udp_port,
+                                                   tqi->datagram_payload.size,
+                                                   tqi->datagram_payload.data);
+                if (send_res == 0)
+                {
+                    break;  // Socket no longer writable, stop sending for now to retry later.
+                }
+                if (send_res < 0)
+                {
+                    (void) fprintf(stderr, "Iface #%zu send error: %i\n", i, errno);
+                }
+            }
+            udpardTxFree(pipe->udpard_tx.memory, udpardTxPop(&pipe->udpard_tx, tqi));
+            tqi = udpardTxPeek(&pipe->udpard_tx);
+        }
+    }
+}
+
+/// Block and process pending frames from the RX sockets of all network interfaces and feed them into the library.
+/// Unblock early if TX sockets become writable and the TX queues are not empty.
+static int16_t pollRx(const UdpardMicrosecond timeout_usec, struct Application* const app)
+{
+    int16_t out = 0;
+    // Fill out the TX awaitable array.
+    size_t         tx_count                                   = 0;
+    UDPTxAwaitable tx_aww[UDPARD_NETWORK_INTERFACE_COUNT_MAX] = {0};
+    for (size_t i = 0; i < app->iface_count; i++)
+    {
+        if (app->tx_pipeline[i].udpard_tx.queue_size > 0)  // There's something to transmit!
+        {
+            tx_aww[tx_count].handle         = &app->tx_pipeline[i].io;
+            tx_aww[tx_count].user_reference = &app->tx_pipeline[i];
+            tx_count++;
+        }
+    }
+    // Fill out the RX awaitable array.
+    size_t         rx_count                                        = 0;
+    UDPRxAwaitable rx_aww[UDPARD_NETWORK_INTERFACE_COUNT_MAX * 10] = {0};
+    for (size_t i = 0; i < app->iface_count; i++)
+    {
+        rx_aww[rx_count].handle         = &app->sub_pnp_node_id_allocation.io[i];
+        rx_aww[rx_count].user_reference = &app->sub_pnp_node_id_allocation;
+        rx_count++;
+        if (app->sub_data.enabled)
+        {
+            rx_aww[rx_count].handle         = &app->sub_data.io[i];
+            rx_aww[rx_count].user_reference = &app->sub_data;
+            rx_count++;
+        }
+        assert(rx_count <= (sizeof(rx_aww) / sizeof(rx_aww[0])));
+    }
+    // Block until something happens.
+    const int16_t wait_result = udpWait(timeout_usec, tx_count, &tx_aww[0], rx_count, &rx_aww[0]);
+    if (wait_result < 0)
+    {
+        out = wait_result;
+    }
+    // Process the RX sockets that became readable.
+    const UdpardMicrosecond ts = getMonotonicMicroseconds();
+    for (size_t i = 0; i < rx_count; i++)
+    {
+        if (out < 0)
+        {
+            break;
+        }
+        if (!rx_aww[i].ready)
+        {
+            continue;
+        }
+        struct Subscriber* const sub          = (struct Subscriber*) rx_aww[i].user_reference;
+        const uint8_t            iface_index  = (uint8_t) (rx_aww[i].handle - &sub->io[0]);
+        size_t                   payload_size = RX_BUFFER_SIZE;
+        void* const payload_data = app->memory_payload.allocate(app->memory_payload.user_reference, RX_BUFFER_SIZE);
+        if (NULL != payload_data)
+        {
+            const int16_t io_res = udpRxReceive(&sub->io[iface_index], &payload_size, payload_data);
+            assert(0 != io_res);
+            if (io_res < 0)
+            {
+                out = io_res;
+                app->memory_payload.deallocate(app->memory_payload.user_reference, RX_BUFFER_SIZE, payload_data);
+            }
+            else
+            {
+                struct UdpardRxTransfer transfer = {0};
+                const int16_t           rx_res =
+                    (int16_t) udpardRxSubscriptionReceive(&sub->subscription,
+                                                          ts,
+                                                          (struct UdpardMutablePayload){.size = payload_size,
+                                                                                        .data = payload_data},
+                                                          iface_index,
+                                                          &transfer);
+                switch (rx_res)
+                {
+                case 1:
+                {
+                    assert(sub->handler != NULL);
+                    sub->handler(sub, &transfer);
+                    udpardRxFragmentFree(transfer.payload,  // Free the payload after the transfer is handled.
+                                         app->memory_fragment,
+                                         (struct UdpardMemoryDeleter){
+                                             .user_reference = app->memory_payload.user_reference,
+                                             .deallocate     = app->memory_payload.deallocate,
+                                         });
+                    break;
+                }
+                case 0:
+                    break;  // No transfer available yet.
+                default:
+                    assert(rx_res == -UDPARD_ERROR_MEMORY);
+                    out = rx_res;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            out = -UDPARD_ERROR_MEMORY;
+        }
+    }
+    // TODO: handle RPC-services.
+    return out;
+}
+
 /// Invalid subject-ID is not considered an error but rather as a disabled publisher.
 /// The application needs to check whether the subject-ID is valid before publishing.
 static void initPublisher(struct Publisher* const self,
@@ -358,6 +516,7 @@ static void initPublisher(struct Publisher* const self,
 static int16_t initSubscriber(struct Subscriber* const             self,
                               const UdpardPortID                   subject_id,
                               const size_t                         extent,
+                              const SubscriberCallback             handler,
                               const struct UdpardRxMemoryResources memory,
                               const size_t                         iface_count,
                               const uint32_t* const                ifaces)
@@ -370,6 +529,7 @@ static int16_t initSubscriber(struct Subscriber* const             self,
         res = (int16_t) udpardRxSubscriptionInit(&self->subscription, subject_id, extent, memory);
         if (res >= 0)
         {
+            self->handler = handler;
             for (size_t i = 0; i < iface_count; i++)
             {
                 res = udpRxInit(&self->io[i],
@@ -588,6 +748,7 @@ int main(const int argc, char* const argv[])
         const int16_t res = initSubscriber(&app.sub_pnp_node_id_allocation,
                                            uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                                            uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_,
+                                           &cbOnNodeIDAllocationData,
                                            rx_memory,
                                            app.iface_count,
                                            &app.ifaces[0]);
@@ -602,6 +763,7 @@ int main(const int argc, char* const argv[])
         const int16_t res = initSubscriber(&app.sub_data,
                                            app.reg.sub_data.base.id.value.natural16.value.elements[0],
                                            uavcan_primitive_array_Real32_1_0_EXTENT_BYTES_,
+                                           &cbOnMyData,
                                            rx_memory,
                                            app.iface_count,
                                            &app.ifaces[0]);
@@ -633,39 +795,13 @@ int main(const int argc, char* const argv[])
         }
 
         // Transmit pending frames from the prioritized TX queues managed by libudpard.
-        for (size_t i = 0; i < app.iface_count; i++)
+        pollTx(monotonic_time, app.iface_count, &app.tx_pipeline[0]);
+        // Wait for network activity and process incoming frames.
+        const int16_t rx_poll_res = pollRx(KILO, &app);
+        if (rx_poll_res < 0)
         {
-            struct TxPipeline* const   pipe = &app.tx_pipeline[i];
-            const struct UdpardTxItem* tqi  = udpardTxPeek(&pipe->udpard_tx);  // Find the highest-priority datagram.
-            while (tqi != NULL)
-            {
-                // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
-                // Otherwise, just drop it and move on to the next one.
-                if ((tqi->deadline_usec == 0) || (tqi->deadline_usec > monotonic_time))
-                {
-                    const int16_t send_res = udpTxSend(&pipe->io,
-                                                       tqi->destination.ip_address,
-                                                       tqi->destination.udp_port,
-                                                       tqi->datagram_payload.size,
-                                                       tqi->datagram_payload.data);
-                    if (send_res == 0)
-                    {
-                        break;  // Socket no longer writable, stop sending for now to retry later.
-                    }
-                    if (send_res < 0)
-                    {
-                        (void) fprintf(stderr, "Iface #%zu send error: %i\n", i, errno);
-                    }
-                }
-                udpardTxFree(pipe->udpard_tx.memory, udpardTxPop(&pipe->udpard_tx, tqi));
-                tqi = udpardTxPeek(&pipe->udpard_tx);
-            }
+            (void) fprintf(stderr, "RX poll error: %i\n", rx_poll_res);
         }
-
-        // Receive pending frames from the RX sockets of all network interfaces and feed them into the library.
-        // Unblock early if TX sockets become writable and the TX queues are not empty.
-        // FIXME TODO
-        usleep(1000);
     }
 
     // Save registers immediately before restarting the node.
