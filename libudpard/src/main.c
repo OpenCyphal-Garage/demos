@@ -89,7 +89,7 @@ struct TxPipeline
 struct RPCDispatcher
 {
     struct UdpardRxRPCDispatcher udpard_rpc_dispatcher;
-    UDPRxHandle                  io;
+    UDPRxHandle                  io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
 };
 
 struct Publisher
@@ -111,6 +111,18 @@ struct Subscriber
     /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
     /// it can erase the payload pointers from the transfer object.
     SubscriberCallback handler;
+};
+
+struct RPCServer;
+typedef void (*RPCServerCallback)(struct RPCServer* const self, struct UdpardRxRPCTransfer* const transfer);
+struct RPCServer
+{
+    struct UdpardRxRPCPort base;
+    bool                   enabled;  ///< True if in use.
+    /// The caller will free the transfer payload after this callback returns.
+    /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
+    /// it can erase the payload pointers from the transfer object.
+    RPCServerCallback handler;
 };
 
 /// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
@@ -139,6 +151,13 @@ struct ApplicationRegisters
     struct SubscriberRegisterSet sub_data;
 };
 
+struct ApplicationMemory
+{
+    struct UdpardMemoryResource session;
+    struct UdpardMemoryResource fragment;
+    struct UdpardMemoryResource payload;
+};
+
 struct Application
 {
     UdpardMicrosecond started_at;
@@ -146,10 +165,7 @@ struct Application
     /// This flag is raised when the node is requested to restart.
     bool restart_required;
 
-    /// Memory allocators.
-    struct UdpardMemoryResource memory_session;
-    struct UdpardMemoryResource memory_fragment;
-    struct UdpardMemoryResource memory_payload;
+    struct ApplicationMemory memory;
 
     /// Common LibUDPard states.
     uint_fast8_t         iface_count;
@@ -172,9 +188,9 @@ struct Application
     struct Subscriber sub_data;  // uavcan_primitive_array_Real32_1_0
 
     /// RPC servers.
-    struct UdpardRxRPCPort srv_get_node_info;
-    struct UdpardRxRPCPort srv_register_list;
-    struct UdpardRxRPCPort srv_register_access;
+    struct RPCServer srv_get_node_info;
+    struct RPCServer srv_register_list;
+    struct RPCServer srv_register_access;
 
     /// Registers.
     struct Register*            reg_root;  ///< The root of the register tree.
@@ -300,6 +316,7 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
     (void) self;
     (void) transfer;
     // TODO FIXME
+    (void) fprintf(stderr, "cbOnNodeIDAllocationData: %zu bytes\n", transfer->payload_size);
 }
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
@@ -307,6 +324,7 @@ static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* c
     (void) self;
     (void) transfer;
     // TODO FIXME
+    (void) fprintf(stderr, "cbOnMyData: %zu bytes\n", transfer->payload_size);
 }
 
 /// Invoked every second.
@@ -361,7 +379,9 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
     // TODO FIXME
 }
 
-static void pollTx(const UdpardMicrosecond time_usec, const size_t iface_count, struct TxPipeline* const tx_pipelines)
+static void transmitPendingFrames(const UdpardMicrosecond  time_usec,
+                                  const size_t             iface_count,
+                                  struct TxPipeline* const tx_pipelines)
 {
     for (size_t i = 0; i < iface_count; i++)
     {
@@ -393,110 +413,215 @@ static void pollTx(const UdpardMicrosecond time_usec, const size_t iface_count, 
     }
 }
 
-/// Block and process pending frames from the RX sockets of all network interfaces and feed them into the library.
-/// Unblock early if TX sockets become writable and the TX queues are not empty.
-static int16_t pollRx(const UdpardMicrosecond timeout_usec, struct Application* const app)
+/// This function is invoked from pollRx when a subscription socket becomes readable.
+/// It takes ownership of the payload.
+/// Returns a negative error code or a non-negative value on success.
+static int16_t acceptDatagramForSubscription(const UdpardMicrosecond               timestamp_usec,
+                                             const struct UdpardMutablePayload     payload,
+                                             const UdpardNodeID                    local_node_id,
+                                             const struct ApplicationMemory* const memory,
+                                             struct Subscriber* const              sub,
+                                             const uint_fast8_t                    iface_index)
 {
-    int16_t out = 0;
-    // Fill out the TX awaitable array.
-    size_t         tx_count                                   = 0;
-    UDPTxAwaitable tx_aww[UDPARD_NETWORK_INTERFACE_COUNT_MAX] = {0};
+    int16_t                 out      = 0;
+    struct UdpardRxTransfer transfer = {0};
+    const int16_t           rx_res =
+        (int16_t) udpardRxSubscriptionReceive(&sub->subscription, timestamp_usec, payload, iface_index, &transfer);
+    switch (rx_res)
+    {
+    case 1:
+    {
+        assert(sub->handler != NULL);
+        // Watch out: as we're using the standard Berkeley socket API, if there's a subject that we both subscribe to
+        // and publish to at the same time, we will see our own data on the subscription socket.
+        // We don't want to process our own data, so we filter out such frames here.
+        // Anonymous traffic published by our node will still be accepted though, but this is acceptable.
+        // We can't filter based on the IP address because there may be multiple nodes sharing the same IP address
+        // (one example is the local loopback interface).
+        if ((local_node_id == UDPARD_NODE_ID_UNSET) || (transfer.source_node_id != local_node_id))
+        {
+            sub->handler(sub, &transfer);
+        }
+        udpardRxFragmentFree(transfer.payload,  // Free the payload after the transfer is handled.
+                             memory->fragment,
+                             (struct UdpardMemoryDeleter){
+                                 .user_reference = memory->payload.user_reference,
+                                 .deallocate     = memory->payload.deallocate,
+                             });
+        break;
+    }
+    case 0:
+        break;  // No transfer available yet.
+    default:
+        assert(rx_res == -UDPARD_ERROR_MEMORY);
+        out = rx_res;
+        break;
+    }
+    return out;
+}
+
+/// Same but for RPC-service datagrams.
+static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timestamp_usec,
+                                    const struct UdpardMutablePayload     payload,
+                                    const struct ApplicationMemory* const memory,
+                                    struct RPCDispatcher* const           dispatcher,
+                                    const uint_fast8_t                    iface_index)
+{
+    int16_t                    out      = 0;
+    struct UdpardRxRPCTransfer transfer = {0};
+    struct UdpardRxRPCPort*    rpc_port = NULL;
+    const int16_t rx_res = (int16_t) udpardRxRPCDispatcherReceive(&dispatcher->udpard_rpc_dispatcher,  // //
+                                                                  timestamp_usec,
+                                                                  payload,
+                                                                  iface_index,
+                                                                  &rpc_port,
+                                                                  &transfer);
+    switch (rx_res)
+    {
+    case 1:
+    {
+        assert(rpc_port != NULL);
+        struct RPCServer* const server = (struct RPCServer*) rpc_port;
+        assert(server->handler != NULL);
+        server->handler(server, &transfer);
+        udpardRxFragmentFree(transfer.base.payload,  // Free the payload after the transfer is handled.
+                             memory->fragment,
+                             (struct UdpardMemoryDeleter){
+                                 .user_reference = memory->payload.user_reference,
+                                 .deallocate     = memory->payload.deallocate,
+                             });
+        break;
+    }
+    case 0:
+        break;  // No transfer available yet.
+    default:
+        assert(rx_res == -UDPARD_ERROR_MEMORY);
+        out = rx_res;
+        break;
+    }
+    return out;
+}
+
+/// Block and process pending frames from the RX sockets of all network interfaces and feed them into the library;
+/// also push the frames from the TX queues into their respective sockets.
+/// May unblock early.
+static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* const app)
+{
+    // Try pushing pending TX frames ahead of time; this is non-blocking.
+    // The reason we do it before blocking is that the application may have generated additional frames to transmit.
+    const UdpardMicrosecond ts_before_usec = getMonotonicMicroseconds();
+    transmitPendingFrames(ts_before_usec, app->iface_count, &app->tx_pipeline[0]);
+
+    // Fill out the TX awaitable array. May be empty if there's nothing to transmit at the moment.
+    size_t         tx_count                                  = 0;
+    UDPTxAwaitable tx_aw[UDPARD_NETWORK_INTERFACE_COUNT_MAX] = {0};
     for (size_t i = 0; i < app->iface_count; i++)
     {
         if (app->tx_pipeline[i].udpard_tx.queue_size > 0)  // There's something to transmit!
         {
-            tx_aww[tx_count].handle         = &app->tx_pipeline[i].io;
-            tx_aww[tx_count].user_reference = &app->tx_pipeline[i];
+            tx_aw[tx_count].handle         = &app->tx_pipeline[i].io;
+            tx_aw[tx_count].user_reference = &app->tx_pipeline[i];
             tx_count++;
         }
     }
+
     // Fill out the RX awaitable array.
-    size_t         rx_count                                        = 0;
-    UDPRxAwaitable rx_aww[UDPARD_NETWORK_INTERFACE_COUNT_MAX * 10] = {0};
-    for (size_t i = 0; i < app->iface_count; i++)
+    size_t         rx_count                                       = 0;
+    UDPRxAwaitable rx_aw[UDPARD_NETWORK_INTERFACE_COUNT_MAX * 10] = {0};
+    for (size_t i = 0; i < app->iface_count; i++)  // Subscription sockets (one per topic per iface).
     {
-        rx_aww[rx_count].handle         = &app->sub_pnp_node_id_allocation.io[i];
-        rx_aww[rx_count].user_reference = &app->sub_pnp_node_id_allocation;
+        rx_aw[rx_count].handle         = &app->sub_pnp_node_id_allocation.io[i];
+        rx_aw[rx_count].user_reference = &app->sub_pnp_node_id_allocation;
         rx_count++;
         if (app->sub_data.enabled)
         {
-            rx_aww[rx_count].handle         = &app->sub_data.io[i];
-            rx_aww[rx_count].user_reference = &app->sub_data;
+            rx_aw[rx_count].handle         = &app->sub_data.io[i];
+            rx_aw[rx_count].user_reference = &app->sub_data;
             rx_count++;
         }
-        assert(rx_count <= (sizeof(rx_aww) / sizeof(rx_aww[0])));
+        assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
     }
-    // Block until something happens.
-    const int16_t wait_result = udpWait(timeout_usec, tx_count, &tx_aww[0], rx_count, &rx_aww[0]);
+    for (size_t i = 0; i < app->iface_count; i++)  // RPC dispatcher sockets (one per iface).
+    {
+        rx_aw[rx_count].handle         = &app->rpc_dispatcher.io[i];
+        rx_aw[rx_count].user_reference = NULL;
+        rx_count++;
+        assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
+    }
+
+    // Block until something happens or the deadline is reached.
+    const int16_t wait_result = udpWait((unblock_deadline > ts_before_usec) ? (unblock_deadline - ts_before_usec) : 0,
+                                        tx_count,
+                                        &tx_aw[0],
+                                        rx_count,
+                                        &rx_aw[0]);
     if (wait_result < 0)
     {
-        out = wait_result;
+        abort();  // Unreachable.
     }
+
     // Process the RX sockets that became readable.
-    const UdpardMicrosecond ts = getMonotonicMicroseconds();
+    // The time has to be re-sampled because the blocking wait may have taken a long time.
+    const UdpardMicrosecond ts_after_usec = getMonotonicMicroseconds();
     for (size_t i = 0; i < rx_count; i++)
     {
-        if (out < 0)
+        if (!rx_aw[i].ready)
         {
-            break;
+            continue;  // This one is not yet ready to read.
         }
-        if (!rx_aww[i].ready)
+        // Allocate memory that we will read the data into. The ownership of this memory will be transferred
+        // to LibUDPard, which will free it when it is no longer needed.
+        // A deeply embedded system may be able to transfer this memory directly from the NIC driver to eliminate copy.
+        struct UdpardMutablePayload payload = {
+            .size = RX_BUFFER_SIZE,
+            .data = app->memory.payload.allocate(app->memory.payload.user_reference, RX_BUFFER_SIZE),
+        };
+        if (NULL == payload.data)
         {
+            (void) fprintf(stderr, "RX payload allocation failure: out of memory\n");
             continue;
         }
-        struct Subscriber* const sub          = (struct Subscriber*) rx_aww[i].user_reference;
-        const uint8_t            iface_index  = (uint8_t) (rx_aww[i].handle - &sub->io[0]);
-        size_t                   payload_size = RX_BUFFER_SIZE;
-        void* const payload_data = app->memory_payload.allocate(app->memory_payload.user_reference, RX_BUFFER_SIZE);
-        if (NULL != payload_data)
+        // Read the data from the socket into the buffer we just allocated.
+        const int16_t rx_result = udpRxReceive(rx_aw[i].handle, &payload.size, payload.data);
+        assert(0 != rx_result);
+        if (rx_result < 0)
         {
-            const int16_t io_res = udpRxReceive(&sub->io[iface_index], &payload_size, payload_data);
-            assert(0 != io_res);
-            if (io_res < 0)
+            (void) fprintf(stderr, "RX socket error: %i\n", rx_result);
+            app->memory.payload.deallocate(app->memory.payload.user_reference, RX_BUFFER_SIZE, payload.data);
+            continue;
+        }
+        // Pass the data buffer into LibUDPard for further processing. It takes ownership of the buffer.
+        if (rx_aw[i].user_reference != NULL)  // This is used to differentiate subscription sockets from RPC sockets.
+        {
+            struct Subscriber* const sub         = (struct Subscriber*) rx_aw[i].user_reference;
+            const uint8_t            iface_index = (uint8_t) (rx_aw[i].handle - &sub->io[0]);
+            const int16_t            read_result = acceptDatagramForSubscription(ts_after_usec,
+                                                                      payload,
+                                                                      app->local_node_id,
+                                                                      &app->memory,
+                                                                      sub,
+                                                                      iface_index);
+            if (read_result < 0)
             {
-                out = io_res;
-                app->memory_payload.deallocate(app->memory_payload.user_reference, RX_BUFFER_SIZE, payload_data);
-            }
-            else
-            {
-                struct UdpardRxTransfer transfer = {0};
-                const int16_t           rx_res =
-                    (int16_t) udpardRxSubscriptionReceive(&sub->subscription,
-                                                          ts,
-                                                          (struct UdpardMutablePayload){.size = payload_size,
-                                                                                        .data = payload_data},
-                                                          iface_index,
-                                                          &transfer);
-                switch (rx_res)
-                {
-                case 1:
-                {
-                    assert(sub->handler != NULL);
-                    sub->handler(sub, &transfer);
-                    udpardRxFragmentFree(transfer.payload,  // Free the payload after the transfer is handled.
-                                         app->memory_fragment,
-                                         (struct UdpardMemoryDeleter){
-                                             .user_reference = app->memory_payload.user_reference,
-                                             .deallocate     = app->memory_payload.deallocate,
-                                         });
-                    break;
-                }
-                case 0:
-                    break;  // No transfer available yet.
-                default:
-                    assert(rx_res == -UDPARD_ERROR_MEMORY);
-                    out = rx_res;
-                    break;
-                }
+                (void) fprintf(stderr, "Iface #%u RX subscription processing error: %i\n", iface_index, read_result);
             }
         }
         else
         {
-            out = -UDPARD_ERROR_MEMORY;
+            const uint8_t iface_index = (uint8_t) (rx_aw[i].handle - &app->rpc_dispatcher.io[0]);
+            assert(iface_index < UDPARD_NETWORK_INTERFACE_COUNT_MAX);
+            const int16_t read_result =
+                acceptDatagramForRPC(ts_after_usec, payload, &app->memory, &app->rpc_dispatcher, iface_index);
+            if (read_result < 0)
+            {
+                (void) fprintf(stderr, "Iface #%u RX RPC processing error: %i\n", iface_index, read_result);
+            }
         }
     }
-    // TODO: handle RPC-services.
-    return out;
+
+    // While processing the RX data we may have generated additional outgoing frames.
+    // Plus we may have pending frames from before the blocking call.
+    transmitPendingFrames(ts_after_usec, app->iface_count, &app->tx_pipeline[0]);
 }
 
 /// Invalid subject-ID is not considered an error but rather as a disabled publisher.
@@ -674,17 +799,20 @@ int main(const int argc, char* const argv[])
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
     struct Application app = {
-        .memory_session  = {.user_reference = &mem_session,
-                            .allocate       = &memoryBlockAllocate,
-                            .deallocate     = &memoryBlockDeallocate},
-        .memory_fragment = {.user_reference = &mem_fragment,
-                            .allocate       = &memoryBlockAllocate,
-                            .deallocate     = &memoryBlockDeallocate},
-        .memory_payload  = {.user_reference = &mem_payload,
-                            .allocate       = &memoryBlockAllocate,
-                            .deallocate     = &memoryBlockDeallocate},
-        .iface_count     = 0,
-        .local_node_id   = UDPARD_NODE_ID_UNSET,
+        .memory =
+            {
+                .session  = {.user_reference = &mem_session,
+                             .allocate       = &memoryBlockAllocate,
+                             .deallocate     = &memoryBlockDeallocate},
+                .fragment = {.user_reference = &mem_fragment,
+                             .allocate       = &memoryBlockAllocate,
+                             .deallocate     = &memoryBlockDeallocate},
+                .payload  = {.user_reference = &mem_payload,
+                             .allocate       = &memoryBlockAllocate,
+                             .deallocate     = &memoryBlockDeallocate},
+            },
+        .iface_count   = 0,
+        .local_node_id = UDPARD_NODE_ID_UNSET,
     };
     // The first thing to do during the application initialization is to load the register values from the non-volatile
     // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
@@ -715,7 +843,7 @@ int main(const int argc, char* const argv[])
     // Initialize the TX pipelines. We have one per local iface (unlike the RX pipelines which are shared).
     for (size_t i = 0; i < app.iface_count; i++)
     {
-        if ((0 != udpardTxInit(&app.tx_pipeline[i].udpard_tx, &app.local_node_id, TX_QUEUE_SIZE, app.memory_payload)) ||
+        if ((0 != udpardTxInit(&app.tx_pipeline[i].udpard_tx, &app.local_node_id, TX_QUEUE_SIZE, app.memory.payload)) ||
             (0 != udpTxInit(&app.tx_pipeline[i].io, app.ifaces[i])))
         {
             (void) fprintf(stderr, "Failed to initialize TX pipeline for iface %zu\n", i);
@@ -740,9 +868,9 @@ int main(const int argc, char* const argv[])
 
     // Initialize the subscribers. They are not dependent on the local node-ID value.
     const struct UdpardRxMemoryResources rx_memory = {
-        .session  = app.memory_session,
-        .fragment = app.memory_fragment,
-        .payload  = {.user_reference = app.memory_payload.user_reference, .deallocate = app.memory_payload.deallocate},
+        .session  = app.memory.session,
+        .fragment = app.memory.fragment,
+        .payload  = {.user_reference = app.memory.payload.user_reference, .deallocate = app.memory.payload.deallocate},
     };
     {
         const int16_t res = initSubscriber(&app.sub_pnp_node_id_allocation,
@@ -793,15 +921,8 @@ int main(const int argc, char* const argv[])
             next_01_hz_iter_at += (MEGA * 10);
             handle01HzLoop(&app, monotonic_time);
         }
-
-        // Transmit pending frames from the prioritized TX queues managed by libudpard.
-        pollTx(monotonic_time, app.iface_count, &app.tx_pipeline[0]);
-        // Wait for network activity and process incoming frames.
-        const int16_t rx_poll_res = pollRx(KILO, &app);
-        if (rx_poll_res < 0)
-        {
-            (void) fprintf(stderr, "RX poll error: %i\n", rx_poll_res);
-        }
+        // Run socket I/O. It will block until network activity or until the specified deadline (may unblock sooner).
+        doIO(next_1_hz_iter_at, &app);
     }
 
     // Save registers immediately before restarting the node.

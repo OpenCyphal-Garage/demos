@@ -81,15 +81,15 @@ void udpRxClose(UDPRxHandle* const self);
 /// The "user_*" fields can be used for user-defined purposes.
 typedef struct
 {
-    const UDPTxHandle* handle;
-    bool               ready;
-    void*              user_reference;
+    UDPTxHandle* handle;
+    bool         ready;
+    void*        user_reference;
 } UDPTxAwaitable;
 typedef struct
 {
-    const UDPRxHandle* handle;
-    bool               ready;
-    void*              user_reference;
+    UDPRxHandle* handle;
+    bool         ready;
+    void*        user_reference;
 } UDPRxAwaitable;
 
 /// Suspend execution until the expiration of the timeout (in microseconds) or until any of the specified handles
