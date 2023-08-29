@@ -111,6 +111,7 @@ struct Subscriber
     /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
     /// it can erase the payload pointers from the transfer object.
     SubscriberCallback handler;
+    void*              user_reference;
 };
 
 struct RPCServer;
@@ -161,6 +162,9 @@ struct ApplicationMemory
 struct Application
 {
     UdpardMicrosecond started_at;
+
+    /// The unique-ID of the local node. This value is initialized once at startup.
+    byte_t unique_id[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_];
 
     /// This flag is raised when the node is requested to restart.
     bool restart_required;
@@ -217,29 +221,22 @@ static UdpardMicrosecond getMonotonicMicroseconds(void)
 /// plug-and-play node-ID allocation by uavcan.pnp.NodeIDAllocationData. The function is infallible.
 static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_])
 {
-    static byte_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_];
-    static bool   initialized = false;
-    if (!initialized)
+    // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
+    // This example is a software-only node, so we generate the UID at first launch and store it permanently.
+    static const char* const Key  = ".unique_id";
+    size_t                   size = uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_;
+    if ((!storageGet(Key, &size, out)) || (size != uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_))
     {
-        initialized = true;
-        // A real hardware node would read its unique-ID from some hardware-specific source (typically stored in ROM).
-        // This example is a software-only node, so we generate the UID at first launch and store it permanently.
-        static const char* const Key  = ".unique_id";
-        size_t                   size = uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_;
-        if ((!storageGet(Key, &size, uid)) || (size != uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_))
+        // Populate the default; it is only used at the first run.
+        for (size_t i = 0; i < uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_; i++)
         {
-            // Populate the default; it is only used at the first run.
-            for (size_t i = 0; i < uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_; i++)
-            {
-                uid[i] = (byte_t) rand();  // NOLINT
-            }
-            if (!storagePut(Key, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_, uid))
-            {
-                abort();  // The node cannot function if the storage system is not available.
-            }
+            out[i] = (byte_t) rand();  // NOLINT
+        }
+        if (!storagePut(Key, uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_, out))
+        {
+            abort();  // The node cannot function if the storage system is not available.
         }
     }
-    (void) memcpy(out, uid, sizeof(uid));
 }
 
 static void regInitPort(struct PortRegisterSet* const self,
@@ -313,10 +310,28 @@ static void publish(struct Application* const app,
 
 static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
 {
-    (void) self;
-    (void) transfer;
-    // TODO FIXME
-    (void) fprintf(stderr, "cbOnNodeIDAllocationData: %zu bytes\n", transfer->payload_size);
+    assert((self != NULL) && (transfer != NULL));
+    if (transfer->source_node_id <= UDPARD_NODE_ID_MAX)
+    {
+        byte_t payload[uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_];
+        size_t payload_size = udpardGather(transfer->payload, sizeof(payload), &payload[0]);
+        uavcan_pnp_NodeIDAllocationData_2_0 obj;
+        if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&obj, &payload[0], &payload_size) >= 0)
+        {
+            struct Application* const app = self->user_reference;
+            assert(app != NULL);
+            if ((obj.node_id.value <= UDPARD_NODE_ID_MAX) &&
+                (0 == memcmp(&obj.unique_id[0], &app->unique_id[0], sizeof(app->unique_id))))
+            {
+                (void) fprintf(stderr,
+                               "Allocated NodeID %u by allocator %u\n",
+                               obj.node_id.value,
+                               transfer->source_node_id);
+                app->local_node_id                                 = obj.node_id.value;
+                app->reg.node_id.value.natural16.value.elements[0] = app->local_node_id;
+            }  // Otherwise, it's a response destined to another node, or it's a malformed message.
+        }      // Otherwise, the message is malformed.
+    }          // Otherwise, it's a request from another allocation client node.
 }
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
@@ -354,10 +369,10 @@ static void handle1HzLoop(struct Application* const app, const UdpardMicrosecond
         // There are other ways to do it, of course. See the docs in the Specification or in the DSDL definition here:
         // https://github.com/OpenCyphal/public_regulated_data_types/blob/master/uavcan/pnp/8165.NodeIDAllocationData.2.0.dsdl
         // Note that a high-integrity/safety-certified application is unlikely to be able to rely on this feature.
-        if (rand() > RAND_MAX / 2)  // NOLINT
+        if (rand() > (RAND_MAX / 2))  // NOLINT
         {
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {.node_id = {.value = UINT16_MAX}};
-            getUniqueID(msg.unique_id);
+            (void) memcpy(&msg.unique_id[0], &app->unique_id[0], sizeof(app->unique_id));
             uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_2_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
             size_t       serialized_size = sizeof(serialized);
             const int8_t err = uavcan_pnp_NodeIDAllocationData_2_0_serialize_(&msg, &serialized[0], &serialized_size);
@@ -541,12 +556,15 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         }
         assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
     }
-    for (size_t i = 0; i < app->iface_count; i++)  // RPC dispatcher sockets (one per iface).
+    if (app->local_node_id <= UDPARD_NODE_ID_MAX)  // The RPC socket is not initialized until the node-ID is set.
     {
-        rx_aw[rx_count].handle         = &app->rpc_dispatcher.io[i];
-        rx_aw[rx_count].user_reference = NULL;
-        rx_count++;
-        assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
+        for (size_t i = 0; i < app->iface_count; i++)  // RPC dispatcher sockets (one per iface).
+        {
+            rx_aw[rx_count].handle         = &app->rpc_dispatcher.io[i];
+            rx_aw[rx_count].user_reference = NULL;
+            rx_count++;
+            assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
+        }
     }
 
     // Block until something happens or the deadline is reached.
@@ -814,6 +832,7 @@ int main(const int argc, char* const argv[])
         .iface_count   = 0,
         .local_node_id = UDPARD_NODE_ID_UNSET,
     };
+    getUniqueID(&app.unique_id[0]);
     // The first thing to do during the application initialization is to load the register values from the non-volatile
     // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
     // information on how to reach the network and how to publish/subscribe to the subjects of interest.
@@ -886,6 +905,7 @@ int main(const int argc, char* const argv[])
             return 1;
         }
         assert(app.sub_pnp_node_id_allocation.enabled);
+        app.sub_pnp_node_id_allocation.user_reference = &app;
     }
     {
         const int16_t res = initSubscriber(&app.sub_data,
@@ -900,6 +920,7 @@ int main(const int argc, char* const argv[])
             (void) fprintf(stderr, "Failed to subscribe to my_data: %i\n", res);
             return 1;
         }
+        app.sub_data.user_reference = &app;
     }
 
     // Main loop.
