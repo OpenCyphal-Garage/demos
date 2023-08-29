@@ -55,6 +55,7 @@ int16_t udpTxSend(UDPTxHandle* const self,
                   const void* const  payload);
 
 /// No effect if the argument is invalid.
+/// This function is guaranteed to invalidate the handle.
 void udpTxClose(UDPTxHandle* const self);
 
 /// Initialize an RX socket for use with LibUDPard, for subscription to subjects or for RPC traffic.
@@ -74,6 +75,7 @@ int16_t udpRxInit(UDPRxHandle* const self,
 int16_t udpRxReceive(UDPRxHandle* const self, size_t* const inout_payload_size, void* const out_payload);
 
 /// No effect if the argument is invalid.
+/// This function is guaranteed to invalidate the handle.
 void udpRxClose(UDPRxHandle* const self);
 
 /// Auxiliary types for use with the I/O multiplexing function.

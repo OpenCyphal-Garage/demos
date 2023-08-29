@@ -333,6 +333,7 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
                                transfer->source_node_id);
                 // Optionally we can unsubscribe to reduce memory utilization, as we no longer need this subject.
                 // Some high-integrity applications may not be able to do that, though.
+                self->handler = NULL;
                 self->enabled = false;
                 for (size_t i = 0; i < app->iface_count; i++)
                 {
@@ -614,7 +615,8 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         assert(0 != rx_result);
         if (rx_result < 0)
         {
-            (void) fprintf(stderr, "RX socket error: %i\n", rx_result);
+            // We end up here if the socket was closed while processing another datagram.
+            // This happens if a subscriber chose to unsubscribe dynamically.
             app->memory.payload.deallocate(app->memory.payload.user_reference, RX_BUFFER_SIZE, payload.data);
             continue;
         }
