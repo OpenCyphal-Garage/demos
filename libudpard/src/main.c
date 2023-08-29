@@ -311,27 +311,37 @@ static void publish(struct Application* const app,
 static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
 {
     assert((self != NULL) && (transfer != NULL));
-    if (transfer->source_node_id <= UDPARD_NODE_ID_MAX)
+    struct Application* const app = self->user_reference;
+    assert(app != NULL);
+    // Remember that anonymous transfers are stateless and are not deduplicated, so we have to check if the node-ID
+    // is already allocated.
+    if ((transfer->source_node_id <= UDPARD_NODE_ID_MAX) && (app->local_node_id == UDPARD_NODE_ID_UNSET))
     {
         byte_t payload[uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_];
         size_t payload_size = udpardGather(transfer->payload, sizeof(payload), &payload[0]);
         uavcan_pnp_NodeIDAllocationData_2_0 obj;
         if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&obj, &payload[0], &payload_size) >= 0)
         {
-            struct Application* const app = self->user_reference;
-            assert(app != NULL);
             if ((obj.node_id.value <= UDPARD_NODE_ID_MAX) &&
                 (0 == memcmp(&obj.unique_id[0], &app->unique_id[0], sizeof(app->unique_id))))
             {
+                app->local_node_id                                 = obj.node_id.value;
+                app->reg.node_id.value.natural16.value.elements[0] = obj.node_id.value;
                 (void) fprintf(stderr,
                                "Allocated NodeID %u by allocator %u\n",
-                               obj.node_id.value,
+                               app->local_node_id,
                                transfer->source_node_id);
-                app->local_node_id                                 = obj.node_id.value;
-                app->reg.node_id.value.natural16.value.elements[0] = app->local_node_id;
+                // Optionally we can unsubscribe to reduce memory utilization, as we no longer need this subject.
+                // Some high-integrity applications may not be able to do that, though.
+                self->enabled = false;
+                for (size_t i = 0; i < app->iface_count; i++)
+                {
+                    udpRxClose(&self->io[i]);
+                }
+                udpardRxSubscriptionFree(&self->subscription);
             }  // Otherwise, it's a response destined to another node, or it's a malformed message.
         }      // Otherwise, the message is malformed.
-    }          // Otherwise, it's a request from another allocation client node.
+    }          // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
 }
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
@@ -611,17 +621,25 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         // Pass the data buffer into LibUDPard for further processing. It takes ownership of the buffer.
         if (rx_aw[i].user_reference != NULL)  // This is used to differentiate subscription sockets from RPC sockets.
         {
-            struct Subscriber* const sub         = (struct Subscriber*) rx_aw[i].user_reference;
-            const uint8_t            iface_index = (uint8_t) (rx_aw[i].handle - &sub->io[0]);
-            const int16_t            read_result = acceptDatagramForSubscription(ts_after_usec,
-                                                                      payload,
-                                                                      app->local_node_id,
-                                                                      &app->memory,
-                                                                      sub,
-                                                                      iface_index);
-            if (read_result < 0)
+            struct Subscriber* const sub = (struct Subscriber*) rx_aw[i].user_reference;
+            if (sub->enabled)
             {
-                (void) fprintf(stderr, "Iface #%u RX subscription processing error: %i\n", iface_index, read_result);
+                const uint8_t iface_index = (uint8_t) (rx_aw[i].handle - &sub->io[0]);
+                const int16_t read_result = acceptDatagramForSubscription(ts_after_usec,
+                                                                          payload,
+                                                                          app->local_node_id,
+                                                                          &app->memory,
+                                                                          sub,
+                                                                          iface_index);
+                if (read_result < 0)
+                {
+                    (void)
+                        fprintf(stderr, "Iface #%u RX subscription processing error: %i\n", iface_index, read_result);
+                }
+            }
+            else  // The subscription was disabled while processing other socket reads. Ignore it.
+            {
+                app->memory.payload.deallocate(app->memory.payload.user_reference, RX_BUFFER_SIZE, payload.data);
             }
         }
         else
