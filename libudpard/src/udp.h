@@ -45,12 +45,13 @@ typedef struct
 /// On error returns a negative error code.
 int16_t udpTxInit(UDPTxHandle* const self, const uint32_t local_iface_address);
 
-/// Send a datagram to the specified endpoint without blocking.
+/// Send a datagram to the specified endpoint without blocking using the specified IP DSCP field value.
 /// A real-time embedded system should normally accept a transmission deadline here for the networking stack.
 /// Returns 1 on success, 0 if the socket is not ready for sending, or a negative error code.
 int16_t udpTxSend(UDPTxHandle* const self,
                   const uint32_t     remote_address,
                   const uint16_t     remote_port,
+                  const uint8_t      dscp,
                   const size_t       payload_size,
                   const void* const  payload);
 

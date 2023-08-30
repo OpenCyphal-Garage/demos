@@ -37,6 +37,7 @@
 // DSDL-generated types.
 #include <uavcan/node/Heartbeat_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
+#include <uavcan/_register/Access_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 #include <uavcan/primitive/array/Real32_1_0.h>
 
@@ -147,6 +148,7 @@ struct ApplicationRegisters
     struct Register              node_id;           ///< uavcan.node.id             : natural16[1]
     struct Register              node_description;  ///< uavcan.node.description    : string
     struct Register              udp_iface;         ///< uavcan.udp.iface           : string
+    struct Register              udp_dscp;          ///< uavcan.udp.dscp            : natural8[8]
     struct Register              mem_info;          ///< A simple diagnostic register for viewing the memory usage.
     struct PublisherRegisterSet  pub_data;
     struct SubscriberRegisterSet sub_data;
@@ -239,54 +241,68 @@ static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_AR
     }
 }
 
-static void regInitPort(struct PortRegisterSet* const self,
-                        struct Register** const       root,
-                        const char* const             prefix,
-                        const char* const             port_name,
-                        const char* const             port_type)
+static int16_t initRPCServer(struct RPCServer* const             self,
+                             struct UdpardRxRPCDispatcher* const dispatcher,
+                             const UdpardPortID                  service_id,
+                             const size_t                        extent,
+                             const RPCServerCallback             handler)
 {
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
     (void) memset(self, 0, sizeof(*self));
-
-    registerInit(&self->id, root, (const char*[]){"uavcan", prefix, port_name, "id", NULL});
-    uavcan_register_Value_1_0_select_natural16_(&self->id.value);
-    self->id.value.natural16.value.count       = 1;
-    self->id.value.natural16.value.elements[0] = UINT16_MAX;
-    self->id.persistent                        = true;
-    self->id.remote_mutable                    = true;
-
-    registerInit(&self->type, root, (const char*[]){"uavcan", prefix, port_name, "type", NULL});
-    uavcan_register_Value_1_0_select_string_(&self->type.value);
-    self->type.value._string.value.count = strlen(port_type);
-    (void) memcpy(&self->type.value._string.value.elements[0], port_type, self->type.value._string.value.count);
-    self->type.persistent = true;
+    self->enabled = service_id <= UDPARD_SUBJECT_ID_MAX;
+    int16_t res   = 0;
+    if (self->enabled)
+    {
+        self->handler = handler;
+        res           = (int16_t) udpardRxRPCDispatcherListen(dispatcher, &self->base, service_id, true, extent);
+    }
+    return res;
 }
 
-static void regInitPublisher(struct PublisherRegisterSet* const self,
-                             struct Register** const            root,
-                             const char* const                  port_name,
-                             const char* const                  port_type)
+/// Invalid subject-ID is not considered an error but rather as a disabled publisher.
+/// The application needs to check whether the subject-ID is valid before publishing.
+static void initPublisher(struct Publisher* const self,
+                          const uint8_t           priority,
+                          const uint16_t          subject_id,
+                          const UdpardMicrosecond tx_timeout_usec)
 {
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
     (void) memset(self, 0, sizeof(*self));
-    regInitPort(&self->base, root, "pub", port_name, port_type);
-
-    registerInit(&self->priority, root, (const char*[]){"uavcan", "pub", port_name, "prio", NULL});
-    uavcan_register_Value_1_0_select_natural8_(&self->priority.value);
-    self->priority.value.natural8.value.count       = 1;
-    self->priority.value.natural8.value.elements[0] = UdpardPriorityNominal;
-    self->priority.persistent                       = true;
-    self->priority.remote_mutable                   = true;
+    self->priority   = (priority <= UDPARD_PRIORITY_MAX) ? ((enum UdpardPriority) priority) : UdpardPriorityOptional;
+    self->subject_id = subject_id;
+    self->tx_timeout_usec = tx_timeout_usec;
 }
 
-static void regInitSubscriber(struct SubscriberRegisterSet* const self,
-                              struct Register** const             root,
-                              const char* const                   port_name,
-                              const char* const                   port_type)
+/// Returns negative error code on failure.
+static int16_t initSubscriber(struct Subscriber* const             self,
+                              const UdpardPortID                   subject_id,
+                              const size_t                         extent,
+                              const SubscriberCallback             handler,
+                              const struct UdpardRxMemoryResources memory,
+                              const size_t                         iface_count,
+                              const uint32_t* const                ifaces)
 {
-    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
     (void) memset(self, 0, sizeof(*self));
-    regInitPort(&self->base, root, "sub", port_name, port_type);
+    self->enabled = subject_id <= UDPARD_SUBJECT_ID_MAX;
+    int16_t res   = 0;
+    if (self->enabled)
+    {
+        res = (int16_t) udpardRxSubscriptionInit(&self->subscription, subject_id, extent, memory);
+        if (res >= 0)
+        {
+            self->handler = handler;
+            for (size_t i = 0; i < iface_count; i++)
+            {
+                res = udpRxInit(&self->io[i],
+                                ifaces[i],
+                                self->subscription.udp_ip_endpoint.ip_address,
+                                self->subscription.udp_ip_endpoint.udp_port);
+                if (res < 0)
+                {
+                    break;
+                }
+            }
+        }
+    }
+    return res;
 }
 
 /// Helpers for emitting transfers over all available interfaces.
@@ -340,6 +356,8 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
                     udpRxClose(&self->io[i]);
                 }
                 udpardRxSubscriptionFree(&self->subscription);
+                // TODO FIXME
+                (void) initRPCServer;
             }  // Otherwise, it's a response destined to another node, or it's a malformed message.
         }      // Otherwise, the message is malformed.
     }          // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
@@ -422,6 +440,7 @@ static void transmitPendingFrames(const UdpardMicrosecond  time_usec,
                 const int16_t send_res = udpTxSend(&pipe->io,
                                                    tqi->destination.ip_address,
                                                    tqi->destination.udp_port,
+                                                   tqi->dscp,
                                                    tqi->datagram_payload.size,
                                                    tqi->datagram_payload.data);
                 if (send_res == 0)
@@ -662,53 +681,6 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
     transmitPendingFrames(ts_after_usec, app->iface_count, &app->tx_pipeline[0]);
 }
 
-/// Invalid subject-ID is not considered an error but rather as a disabled publisher.
-/// The application needs to check whether the subject-ID is valid before publishing.
-static void initPublisher(struct Publisher* const self,
-                          const uint8_t           priority,
-                          const uint16_t          subject_id,
-                          const UdpardMicrosecond tx_timeout_usec)
-{
-    (void) memset(self, 0, sizeof(*self));
-    self->priority   = (priority <= UDPARD_PRIORITY_MAX) ? ((enum UdpardPriority) priority) : UdpardPriorityOptional;
-    self->subject_id = subject_id;
-    self->tx_timeout_usec = tx_timeout_usec;
-}
-
-/// Returns negative error code on failure.
-static int16_t initSubscriber(struct Subscriber* const             self,
-                              const UdpardPortID                   subject_id,
-                              const size_t                         extent,
-                              const SubscriberCallback             handler,
-                              const struct UdpardRxMemoryResources memory,
-                              const size_t                         iface_count,
-                              const uint32_t* const                ifaces)
-{
-    (void) memset(self, 0, sizeof(*self));
-    self->enabled = subject_id <= UDPARD_SUBJECT_ID_MAX;
-    int16_t res   = 0;
-    if (self->enabled)
-    {
-        res = (int16_t) udpardRxSubscriptionInit(&self->subscription, subject_id, extent, memory);
-        if (res >= 0)
-        {
-            self->handler = handler;
-            for (size_t i = 0; i < iface_count; i++)
-            {
-                res = udpRxInit(&self->io[i],
-                                ifaces[i],
-                                self->subscription.udp_ip_endpoint.ip_address,
-                                self->subscription.udp_ip_endpoint.udp_port);
-                if (res < 0)
-                {
-                    break;
-                }
-            }
-        }
-    }
-    return res;
-}
-
 static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const self)
 {
     (void) self;
@@ -718,10 +690,61 @@ static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const se
     return out;
 }
 
+static void regInitPort(struct PortRegisterSet* const self,
+                        struct Register** const       root,
+                        const char* const             prefix,
+                        const char* const             port_name,
+                        const char* const             port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+
+    registerInit(&self->id, root, (const char*[]){"uavcan", prefix, port_name, "id", NULL});
+    uavcan_register_Value_1_0_select_natural16_(&self->id.value);
+    self->id.value.natural16.value.count       = 1;
+    self->id.value.natural16.value.elements[0] = UINT16_MAX;
+    self->id.persistent                        = true;
+    self->id.remote_mutable                    = true;
+
+    registerInit(&self->type, root, (const char*[]){"uavcan", prefix, port_name, "type", NULL});
+    uavcan_register_Value_1_0_select_string_(&self->type.value);
+    self->type.value._string.value.count = strlen(port_type);
+    (void) memcpy(&self->type.value._string.value.elements[0], port_type, self->type.value._string.value.count);
+    self->type.persistent = true;
+}
+
+static void regInitPublisher(struct PublisherRegisterSet* const self,
+                             struct Register** const            root,
+                             const char* const                  port_name,
+                             const char* const                  port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+    regInitPort(&self->base, root, "pub", port_name, port_type);
+
+    registerInit(&self->priority, root, (const char*[]){"uavcan", "pub", port_name, "prio", NULL});
+    uavcan_register_Value_1_0_select_natural8_(&self->priority.value);
+    self->priority.value.natural8.value.count       = 1;
+    self->priority.value.natural8.value.elements[0] = UdpardPriorityNominal;
+    self->priority.persistent                       = true;
+    self->priority.remote_mutable                   = true;
+}
+
+static void regInitSubscriber(struct SubscriberRegisterSet* const self,
+                              struct Register** const             root,
+                              const char* const                   port_name,
+                              const char* const                   port_type)
+{
+    assert((self != NULL) && (root != NULL) && (port_name != NULL) && (port_type != NULL));
+    (void) memset(self, 0, sizeof(*self));
+    regInitPort(&self->base, root, "sub", port_name, port_type);
+}
+
 /// Enters all registers into the tree and initializes their default value.
 /// The next step after this is to load the values from the non-volatile storage.
 static void initRegisters(struct ApplicationRegisters* const reg, struct Register** const root)
 {
+    // The standard node-ID register.
     registerInit(&reg->node_id, root, (const char*[]){"uavcan", "node", "id", NULL});
     uavcan_register_Value_1_0_select_natural16_(&reg->node_id.value);
     reg->node_id.value.natural16.value.count       = 1;
@@ -729,11 +752,13 @@ static void initRegisters(struct ApplicationRegisters* const reg, struct Registe
     reg->node_id.persistent                        = true;
     reg->node_id.remote_mutable                    = true;
 
+    // The standard description register; can be mutated by the integrator arbitrarily.
     registerInit(&reg->node_description, root, (const char*[]){"uavcan", "node", "description", NULL});
     uavcan_register_Value_1_0_select_string_(&reg->node_description.value);  // Empty by default.
     reg->node_description.persistent     = true;
     reg->node_description.remote_mutable = true;
 
+    // The standard interface list register. Defaults to the loopback interface.
     registerInit(&reg->udp_iface, root, (const char*[]){"uavcan", "udp", "iface", NULL});
     uavcan_register_Value_1_0_select_string_(&reg->udp_iface.value);
     reg->udp_iface.persistent                = true;
@@ -743,11 +768,23 @@ static void initRegisters(struct ApplicationRegisters* const reg, struct Registe
                   DEFAULT_IFACE,
                   reg->udp_iface.value._string.value.count);
 
+    // The standard DSCP mapping register. The recommended DSCP mapping is all zeros; see the Cyphal/UDP specification.
+    // Refer to RFC 2474 and RFC 8837 for more information on DSCP.
+    registerInit(&reg->udp_dscp, root, (const char*[]){"uavcan", "udp", "dscp", NULL});
+    uavcan_register_Value_1_0_select_natural8_(&reg->udp_dscp.value);
+    reg->udp_dscp.persistent                 = true;
+    reg->udp_dscp.remote_mutable             = true;
+    reg->udp_dscp.value.natural8.value.count = UDPARD_PRIORITY_MAX + 1;
+    (void) memset(&reg->udp_dscp.value.natural8.value.elements[0], 0, reg->udp_dscp.value.natural8.value.count);
+
+    // An application-specific register exposing the memory usage of the application.
     registerInit(&reg->mem_info, root, (const char*[]){"sys", "info", "mem", NULL});
     reg->mem_info.getter = &getRegisterSysInfoMem;
 
+    // Publisher port registers.
     regInitPublisher(&reg->pub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
 
+    // Subscriber port registers.
     regInitSubscriber(&reg->sub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
 }
 
@@ -887,6 +924,10 @@ int main(const int argc, char* const argv[])
         {
             (void) fprintf(stderr, "Failed to initialize TX pipeline for iface %zu\n", i);
             return 1;
+        }
+        for (size_t k = 0; k <= UDPARD_PRIORITY_MAX; k++)
+        {
+            app.tx_pipeline[i].udpard_tx.dscp_value_per_priority[k] = app.reg.udp_dscp.value.natural8.value.elements[k];
         }
     }
 

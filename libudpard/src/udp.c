@@ -20,6 +20,9 @@
 /// This is the value recommended by the Cyphal/UDP specification.
 #define OVERRIDE_TTL 16
 
+/// RFC 2474.
+#define DSCP_MAX 63
+
 static bool isMulticast(const uint32_t address)
 {
     return (address & 0xF0000000UL) == 0xE0000000UL;  // NOLINT(*-magic-numbers)
@@ -63,12 +66,16 @@ int16_t udpTxInit(UDPTxHandle* const self, const uint32_t local_iface_address)
 int16_t udpTxSend(UDPTxHandle* const self,
                   const uint32_t     remote_address,
                   const uint16_t     remote_port,
+                  const uint8_t      dscp,
                   const size_t       payload_size,
                   const void* const  payload)
 {
     int16_t res = -EINVAL;
-    if ((self != NULL) && (self->fd >= 0) && (remote_address > 0) && (remote_port > 0) && (payload != NULL))
+    if ((self != NULL) && (self->fd >= 0) && (remote_address > 0) && (remote_port > 0) && (payload != NULL) &&
+        (dscp <= DSCP_MAX))
     {
+        const int dscp_int = dscp << 2U;  // The 2 least significant bits are used for the ECN field.
+        (void) setsockopt(self->fd, IPPROTO_IP, IP_TOS, &dscp_int, sizeof(dscp_int));  // Best effort.
         const ssize_t send_result =
             sendto(self->fd,
                    payload,
