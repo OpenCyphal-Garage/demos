@@ -38,6 +38,7 @@
 #include <uavcan/node/Heartbeat_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
 #include <uavcan/_register/Access_1_0.h>
+#include <uavcan/_register/List_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
 #include <uavcan/primitive/array/Real32_1_0.h>
 
@@ -116,7 +117,11 @@ struct Subscriber
 };
 
 struct RPCServer;
-typedef void (*RPCServerCallback)(struct RPCServer* const self, struct UdpardRxRPCTransfer* const transfer);
+// The TX pipelines are passed to let the handler transmit the response.
+typedef void (*RPCServerCallback)(struct RPCServer* const           self,
+                                  struct UdpardRxRPCTransfer* const request_transfer,
+                                  const size_t                      iface_count,
+                                  struct TxPipeline* const          tx);
 struct RPCServer
 {
     struct UdpardRxRPCPort base;
@@ -125,6 +130,7 @@ struct RPCServer
     /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
     /// it can erase the payload pointers from the transfer object.
     RPCServerCallback handler;
+    void*             user_reference;
 };
 
 /// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
@@ -258,6 +264,35 @@ static int16_t initRPCServer(struct RPCServer* const             self,
     return res;
 }
 
+/// The dispatcher passed here shall already be initialized.
+static int16_t startRPCDispatcher(struct RPCDispatcher* const self,
+                                  const UdpardNodeID          local_node_id,
+                                  const size_t                iface_count,
+                                  const uint32_t* const       ifaces)
+{
+    struct UdpardUDPIPEndpoint udp_ip_endpoint = {0};
+    int16_t res = (int16_t) udpardRxRPCDispatcherStart(&self->udpard_rpc_dispatcher, local_node_id, &udp_ip_endpoint);
+    if (res == 0)
+    {
+        for (size_t i = 0; i < iface_count; i++)
+        {
+            res = udpRxInit(&self->io[i], ifaces[i], udp_ip_endpoint.ip_address, udp_ip_endpoint.udp_port);
+            (void) fprintf(stderr,
+                           "RPCDispatcher socket iface %08x#%zu endpoint %08x:%u result %i\n",
+                           ifaces[i],
+                           i,
+                           udp_ip_endpoint.ip_address,
+                           udp_ip_endpoint.udp_port,
+                           res);
+            if (res < 0)
+            {
+                break;
+            }
+        }
+    }
+    return res;
+}
+
 /// Invalid subject-ID is not considered an error but rather as a disabled publisher.
 /// The application needs to check whether the subject-ID is valid before publishing.
 static void initPublisher(struct Publisher* const self,
@@ -295,6 +330,13 @@ static int16_t initSubscriber(struct Subscriber* const             self,
                                 ifaces[i],
                                 self->subscription.udp_ip_endpoint.ip_address,
                                 self->subscription.udp_ip_endpoint.udp_port);
+                (void) fprintf(stderr,
+                               "Subscriber socket iface %08x#%zu endpoint %08x:%u result %i\n",
+                               ifaces[i],
+                               i,
+                               self->subscription.udp_ip_endpoint.ip_address,
+                               self->subscription.udp_ip_endpoint.udp_port,
+                               res);
                 if (res < 0)
                 {
                     break;
@@ -305,20 +347,43 @@ static int16_t initSubscriber(struct Subscriber* const             self,
     return res;
 }
 
-/// Helpers for emitting transfers over all available interfaces.
-static void publish(struct Application* const app,
-                    struct Publisher* const   pub,
-                    const size_t              payload_size,
-                    const void* const         payload)
+/// A helper for publishing a message over all available redundant network interfaces.
+static void publish(const size_t             iface_count,
+                    struct TxPipeline* const tx,
+                    struct Publisher* const  pub,
+                    const size_t             payload_size,
+                    const void* const        payload)
 {
     const UdpardMicrosecond deadline = getMonotonicMicroseconds() + pub->tx_timeout_usec;
-    for (size_t i = 0; i < app->iface_count; i++)
+    for (size_t i = 0; i < iface_count; i++)
     {
-        (void) udpardTxPublish(&app->tx_pipeline[i].udpard_tx,
+        (void) udpardTxPublish(&tx[i].udpard_tx,
                                deadline,
                                pub->priority,
                                pub->subject_id,
                                &pub->transfer_id,
+                               (struct UdpardPayload){.size = payload_size, .data = payload},
+                               NULL);
+    }
+}
+
+/// A helper for transmitting an RPC-service response over all available redundant network interfaces.
+/// The original request transfer is needed to extract the response metadata such as the transfer-ID and client node-ID.
+static void respond(const size_t                      iface_count,
+                    struct TxPipeline* const          tx,
+                    struct UdpardRxRPCTransfer* const culprit,
+                    const size_t                      payload_size,
+                    const void* const                 payload)
+{
+    const UdpardMicrosecond deadline = getMonotonicMicroseconds() + MEGA;
+    for (size_t i = 0; i < iface_count; i++)
+    {
+        (void) udpardTxRespond(&tx[i].udpard_tx,
+                               deadline,
+                               culprit->base.priority,
+                               culprit->service_id,
+                               culprit->base.source_node_id,
+                               culprit->base.transfer_id,
                                (struct UdpardPayload){.size = payload_size, .data = payload},
                                NULL);
     }
@@ -356,8 +421,17 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
                     udpRxClose(&self->io[i]);
                 }
                 udpardRxSubscriptionFree(&self->subscription);
-                // TODO FIXME
-                (void) initRPCServer;
+                // Now that we know our node-ID, we can initialize the RPC dispatcher.
+                assert(app->local_node_id <= UDPARD_NODE_ID_MAX);
+                assert(app->rpc_dispatcher.udpard_rpc_dispatcher.local_node_id == UDPARD_NODE_ID_UNSET);
+                const int16_t rpc_start_res = startRPCDispatcher(&app->rpc_dispatcher,  //
+                                                                 app->local_node_id,
+                                                                 app->iface_count,
+                                                                 &app->ifaces[0]);
+                if (rpc_start_res < 0)
+                {
+                    (void) fprintf(stderr, "RPC dispatcher start failed: %i\n", rpc_start_res);
+                }
             }  // Otherwise, it's a response destined to another node, or it's a malformed message.
         }      // Otherwise, the message is malformed.
     }          // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
@@ -369,6 +443,39 @@ static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* c
     (void) transfer;
     // TODO FIXME
     (void) fprintf(stderr, "cbOnMyData: %zu bytes\n", transfer->payload_size);
+}
+
+static void cbOnGetNodeInfoRequest(struct RPCServer* const           self,
+                                   struct UdpardRxRPCTransfer* const request_transfer,
+                                   const size_t                      iface_count,
+                                   struct TxPipeline* const          tx)
+{
+    assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
+    (void) iface_count;
+    (void) fprintf(stderr, "cbOnGetNodeInfoRequest\n");
+    (void) respond;
+}
+
+static void cbOnRegisterListRequest(struct RPCServer* const           self,
+                                    struct UdpardRxRPCTransfer* const request_transfer,
+                                    const size_t                      iface_count,
+                                    struct TxPipeline* const          tx)
+{
+    assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
+    (void) iface_count;
+    (void) fprintf(stderr, "cbOnRegisterListRequest\n");
+    (void) respond;
+}
+
+static void cbOnRegisterAccessRequest(struct RPCServer* const           self,
+                                      struct UdpardRxRPCTransfer* const request_transfer,
+                                      const size_t                      iface_count,
+                                      struct TxPipeline* const          tx)
+{
+    assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
+    (void) iface_count;
+    (void) fprintf(stderr, "cbOnRegisterAccessRequest\n");
+    (void) respond;
 }
 
 /// Invoked every second.
@@ -388,7 +495,7 @@ static void handle1HzLoop(struct Application* const app, const UdpardMicrosecond
         assert(err >= 0);
         if (err >= 0)
         {
-            publish(app, &app->pub_heartbeat, serialized_size, &serialized[0]);
+            publish(app->iface_count, &app->tx_pipeline[0], &app->pub_heartbeat, serialized_size, &serialized[0]);
         }
     }
     else  // If we don't have a node-ID, obtain one by publishing allocation request messages until we get a response.
@@ -409,7 +516,11 @@ static void handle1HzLoop(struct Application* const app, const UdpardMicrosecond
             if (err >= 0)
             {
                 // The response will arrive asynchronously eventually.
-                publish(app, &app->pub_pnp_node_id_allocation, serialized_size, &serialized[0]);
+                publish(app->iface_count,
+                        &app->tx_pipeline[0],
+                        &app->pub_pnp_node_id_allocation,
+                        serialized_size,
+                        &serialized[0]);
             }
         }
     }
@@ -510,7 +621,9 @@ static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timest
                                     const struct UdpardMutablePayload     payload,
                                     const struct ApplicationMemory* const memory,
                                     struct RPCDispatcher* const           dispatcher,
-                                    const uint_fast8_t                    iface_index)
+                                    const uint_fast8_t                    iface_index,
+                                    const size_t                          iface_count,
+                                    struct TxPipeline* const              tx)
 {
     int16_t                    out      = 0;
     struct UdpardRxRPCTransfer transfer = {0};
@@ -525,10 +638,16 @@ static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timest
     {
     case 1:
     {
+        (void) fprintf(stderr,
+                       "RPC request on service %u from client %u with transfer-ID %lu via iface #%u\n",
+                       transfer.service_id,
+                       transfer.base.source_node_id,
+                       transfer.base.transfer_id,
+                       iface_index);
         assert(rpc_port != NULL);
         struct RPCServer* const server = (struct RPCServer*) rpc_port;
         assert(server->handler != NULL);
-        server->handler(server, &transfer);
+        server->handler(server, &transfer, iface_count, tx);
         udpardRxFragmentFree(transfer.base.payload,  // Free the payload after the transfer is handled.
                              memory->fragment,
                              (struct UdpardMemoryDeleter){
@@ -667,8 +786,13 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         {
             const uint8_t iface_index = (uint8_t) (rx_aw[i].handle - &app->rpc_dispatcher.io[0]);
             assert(iface_index < UDPARD_NETWORK_INTERFACE_COUNT_MAX);
-            const int16_t read_result =
-                acceptDatagramForRPC(ts_after_usec, payload, &app->memory, &app->rpc_dispatcher, iface_index);
+            const int16_t read_result = acceptDatagramForRPC(ts_after_usec,
+                                                             payload,
+                                                             &app->memory,
+                                                             &app->rpc_dispatcher,
+                                                             iface_index,
+                                                             app->iface_count,
+                                                             &app->tx_pipeline[0]);
             if (read_result < 0)
             {
                 (void) fprintf(stderr, "Iface #%u RX RPC processing error: %i\n", iface_index, read_result);
@@ -984,8 +1108,53 @@ int main(const int argc, char* const argv[])
         app.sub_data.user_reference = &app;
     }
 
+    // Initialize the RPC services. First, we initialize the dispatcher.
+    // If the local node-ID is already known, we must start the dispatcher right away;
+    // otherwise, the starting part will be postponed until the PnP node-ID allocation is finished.
+    if (udpardRxRPCDispatcherInit(&app.rpc_dispatcher.udpard_rpc_dispatcher, rx_memory) != 0)
+    {
+        abort();  // This is infallible.
+    }
+    if (app.local_node_id <= UDPARD_NODE_ID_MAX)  // Start if node-ID is known, otherwise wait until it is known.
+    {
+        const int16_t rpc_start_res = startRPCDispatcher(&app.rpc_dispatcher,  //
+                                                         app.local_node_id,
+                                                         app.iface_count,
+                                                         &app.ifaces[0]);
+        if (rpc_start_res < 0)
+        {
+            (void) fprintf(stderr, "RPC dispatcher start failed: %i\n", rpc_start_res);
+            return 1;
+        }
+    }
+    // Initialize the RPC server ports.
+    if (initRPCServer(&app.srv_get_node_info,
+                      &app.rpc_dispatcher.udpard_rpc_dispatcher,
+                      uavcan_node_GetInfo_1_0_FIXED_PORT_ID_,
+                      uavcan_node_GetInfo_Request_1_0_EXTENT_BYTES_,
+                      &cbOnGetNodeInfoRequest) != 1)
+    {
+        abort();
+    }
+    if (initRPCServer(&app.srv_register_list,
+                      &app.rpc_dispatcher.udpard_rpc_dispatcher,
+                      uavcan_register_List_1_0_FIXED_PORT_ID_,
+                      uavcan_register_List_Request_1_0_EXTENT_BYTES_,
+                      &cbOnRegisterListRequest) != 1)
+    {
+        abort();
+    }
+    if (initRPCServer(&app.srv_register_access,
+                      &app.rpc_dispatcher.udpard_rpc_dispatcher,
+                      uavcan_register_Access_1_0_FIXED_PORT_ID_,
+                      uavcan_register_Access_Request_1_0_EXTENT_BYTES_,
+                      &cbOnRegisterAccessRequest) != 1)
+    {
+        abort();
+    }
+
     // Main loop.
-    (void) fprintf(stderr, "RUNNING\n");
+    (void) fprintf(stderr, "NODE STARTED\n");
     app.started_at                       = getMonotonicMicroseconds();
     UdpardMicrosecond next_1_hz_iter_at  = app.started_at + MEGA;
     UdpardMicrosecond next_01_hz_iter_at = app.started_at + (MEGA * 10);
