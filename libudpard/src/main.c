@@ -36,6 +36,7 @@
 
 // DSDL-generated types.
 #include <uavcan/node/Heartbeat_1_0.h>
+#include <uavcan/node/port/List_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
 #include <uavcan/_register/Access_1_0.h>
 #include <uavcan/_register/List_1_0.h>
@@ -192,6 +193,7 @@ struct Application
 
     /// Publishers.
     struct Publisher pub_heartbeat;
+    struct Publisher pub_port_list;
     struct Publisher pub_pnp_node_id_allocation;
     struct Publisher pub_data;  // uavcan_primitive_array_Real32_1_0
 
@@ -614,9 +616,75 @@ static void handle1HzLoop(struct Application* const app, const UdpardMicrosecond
 /// Invoked every 10 seconds.
 static void handle01HzLoop(struct Application* const app, const UdpardMicrosecond monotonic_time)
 {
-    (void) app;
+    assert(app != NULL);
     (void) monotonic_time;
-    // TODO FIXME
+    if (app->local_node_id <= UDPARD_NODE_ID_MAX)
+    {
+        uavcan_node_port_List_1_0 msg;  // Default initialization skipped because the struct is large.
+        // Publishers.
+        {
+            uavcan_node_port_SubjectIDList_1_0_select_sparse_list_(&msg.publishers);
+            msg.publishers.sparse_list.count = 0;
+            msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value =
+                app->pub_heartbeat.subject_id;
+            msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value =
+                app->pub_port_list.subject_id;
+            // The PnP publisher is not used when a node-ID is available.
+            if (app->pub_data.subject_id <= UDPARD_SUBJECT_ID_MAX)
+            {
+                msg.publishers.sparse_list.elements[msg.publishers.sparse_list.count++].value =
+                    app->pub_data.subject_id;
+            }
+        }
+        // Subscribers.
+        {
+            uavcan_node_port_SubjectIDList_1_0_select_sparse_list_(&msg.subscribers);
+            msg.subscribers.sparse_list.count = 0;
+            if (app->sub_pnp_node_id_allocation.enabled)
+            {
+                msg.subscribers.sparse_list.elements[msg.subscribers.sparse_list.count++].value =
+                    uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_;
+            }
+            if (app->sub_data.enabled)
+            {
+                msg.subscribers.sparse_list.elements[msg.subscribers.sparse_list.count++].value =
+                    app->reg.sub_data.base.id.value.natural16.value.elements[0];
+            }
+        }
+        // RPC clients.
+        {
+            (void) memset(msg.clients.mask_bitpacked_, 0x00, sizeof(msg.clients.mask_bitpacked_));
+            // No clients in this application.
+        }
+        // RPC servers.
+        {
+            (void) memset(msg.servers.mask_bitpacked_, 0x00, sizeof(msg.clients.mask_bitpacked_));
+            const struct RPCServer* const srv[] = {&app->srv_get_node_info,
+                                                   &app->srv_register_list,
+                                                   &app->srv_register_access};
+            for (size_t i = 0; i < (sizeof(srv) / sizeof(srv[0])); i++)
+            {
+                if (srv[i]->enabled)
+                {
+                    (void) nunavutSetBit(msg.servers.mask_bitpacked_,
+                                         sizeof(msg.servers.mask_bitpacked_),
+                                         srv[i]->base.service_id,
+                                         true);
+                }
+            }
+        }
+        // Serialize and publish.
+        uint8_t serialized[uavcan_node_port_List_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+        size_t  serialized_size = sizeof(serialized);
+        if (uavcan_node_port_List_1_0_serialize_(&msg, &serialized[0], &serialized_size) >= 0)
+        {
+            publish(app->iface_count, &app->tx_pipeline[0], &app->pub_port_list, serialized_size, &serialized[0]);
+        }
+        else
+        {
+            assert(false);
+        }
+    }
 }
 
 static void transmitPendingFrames(const UdpardMicrosecond  time_usec,
@@ -1162,6 +1230,7 @@ int main(const int argc, char* const argv[])
 
     // Initialize the publishers. They are not dependent on the local node-ID value.
     initPublisher(&app.pub_heartbeat, UdpardPriorityNominal, uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_, 1 * MEGA);
+    initPublisher(&app.pub_port_list, UdpardPriorityOptional, uavcan_node_port_List_1_0_FIXED_PORT_ID_, 10 * MEGA);
     initPublisher(&app.pub_pnp_node_id_allocation,
                   UdpardPrioritySlow,
                   uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
