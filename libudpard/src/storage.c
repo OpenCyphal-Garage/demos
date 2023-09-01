@@ -30,6 +30,12 @@ struct KeyHash
     char hash[KEY_HASH_LENGTH + 1];  // Digits plus the null terminator.
 };
 
+#define KEY_EXTENSION ".cfg"
+struct KeyPath
+{
+    char path[KEY_HASH_LENGTH + sizeof(KEY_EXTENSION) + 1];
+};
+
 static struct KeyHash computeKeyHash(const char* const key)
 {
     static const char     Alphabet[] = "0123456789"
@@ -48,13 +54,17 @@ static struct KeyHash computeKeyHash(const char* const key)
     return out;
 }
 
+static struct KeyPath computeKeyPath(const char* const key)
+{
+    struct KeyPath out = {.path = {0}};
+    (void) memcpy(&out.path[0], &computeKeyHash(key).hash[0], KEY_HASH_LENGTH);
+    (void) memcpy(&out.path[KEY_HASH_LENGTH], KEY_EXTENSION, strlen(KEY_EXTENSION));
+    return out;
+}
+
 static FILE* keyOpen(const char* const key, const bool write)
 {
-    char path[KEY_HASH_LENGTH + 4 + 1];  // Hash + extension + null terminator.
-    (void) memcpy(&path[0], &computeKeyHash(key).hash[0], KEY_HASH_LENGTH);
-    (void) memcpy(&path[KEY_HASH_LENGTH], ".cfg", 4);
-    path[sizeof(path) - 1] = '\0';
-    return fopen(&path[0], write ? "wb" : "rb");
+    return fopen(&computeKeyPath(key).path[0], write ? "wb" : "rb");
 }
 
 bool storageGet(const char* const key, size_t* const inout_size, void* const data)
@@ -70,14 +80,6 @@ bool storageGet(const char* const key, size_t* const inout_size, void* const dat
             (void) fclose(fp);
         }
     }
-#if 0
-    (void) fprintf(stderr,
-                   "storageGet(%s, %zu, %p) -> %s\n",
-                   key,
-                   (inout_size == NULL) ? 0 : (*inout_size),
-                   data,
-                   result ? "YES" : "NO");
-#endif
     return result;
 }
 
@@ -93,13 +95,10 @@ bool storagePut(const char* const key, const size_t size, const void* const data
             (void) fclose(fp);
         }
     }
-#if 0
-    (void) fprintf(stderr, "storagePut(%s, %zu, %p) -> %s\n", key, size, data, result ? "YES" : "NO");
-#endif
     return result;
 }
 
 bool storageDrop(const char* const key)
 {
-    return (key != NULL) && (unlink(&computeKeyHash(key).hash[0]) == 0);
+    return (key != NULL) && (unlink(&computeKeyPath(key).path[0]) == 0);
 }

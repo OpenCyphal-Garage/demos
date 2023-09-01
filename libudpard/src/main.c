@@ -38,6 +38,7 @@
 #include <uavcan/node/Heartbeat_1_0.h>
 #include <uavcan/node/port/List_1_0.h>
 #include <uavcan/node/GetInfo_1_0.h>
+#include <uavcan/node/ExecuteCommand_1_1.h>
 #include <uavcan/_register/Access_1_0.h>
 #include <uavcan/_register/List_1_0.h>
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
@@ -177,6 +178,7 @@ struct Application
 
     /// This flag is raised when the node is requested to restart.
     bool restart_required;
+    bool factory_reset_required;
 
     struct ApplicationMemory memory;
 
@@ -203,6 +205,7 @@ struct Application
 
     /// RPC servers.
     struct RPCServer srv_get_node_info;
+    struct RPCServer srv_execute_command;
     struct RPCServer srv_register_list;
     struct RPCServer srv_register_access;
 
@@ -252,7 +255,7 @@ static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_AR
 static int16_t initRPCServer(struct RPCServer* const             self,
                              struct UdpardRxRPCDispatcher* const dispatcher,
                              const UdpardPortID                  service_id,
-                             const size_t                        extent,
+                             const size_t                        request_extent,
                              const RPCServerCallback             handler)
 {
     (void) memset(self, 0, sizeof(*self));
@@ -261,7 +264,7 @@ static int16_t initRPCServer(struct RPCServer* const             self,
     if (self->enabled)
     {
         self->handler = handler;
-        res           = (int16_t) udpardRxRPCDispatcherListen(dispatcher, &self->base, service_id, true, extent);
+        res = (int16_t) udpardRxRPCDispatcherListen(dispatcher, &self->base, service_id, true, request_extent);
     }
     return res;
 }
@@ -476,6 +479,73 @@ static void cbOnGetNodeInfoRequest(struct RPCServer* const           self,
     }
 }
 
+static void cbOnExecuteCommandRequest(struct RPCServer* const           self,
+                                      struct UdpardRxRPCTransfer* const request_transfer,
+                                      const size_t                      iface_count,
+                                      struct TxPipeline* const          tx)
+{
+    assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
+    struct Application* const app = self->user_reference;
+    assert(app != NULL);
+    uavcan_node_ExecuteCommand_Request_1_1 request = {0};
+    byte_t                                 payload[uavcan_node_ExecuteCommand_Request_1_1_EXTENT_BYTES_];
+    size_t payload_size = udpardGather(request_transfer->base.payload, sizeof(payload), &payload[0]);
+    if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&request, &payload[0], &payload_size) >= 0)
+    {
+        uavcan_node_ExecuteCommand_Response_1_1 resp = {
+            .status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_INTERNAL_ERROR,
+        };
+        switch (request.command)
+        {
+        case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_RESTART:
+        case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_STORE_PERSISTENT_STATES:
+        {
+            // The registers are stored only during shutdown (i.e., before reboot),
+            // so these two commands are handled identically in this implementation.
+            app->restart_required = true;
+            resp.status           = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+            break;
+        }
+        case uavcan_node_ExecuteCommand_Request_1_1_COMMAND_FACTORY_RESET:
+        {
+            app->factory_reset_required = true;  // Restart is needed to complete the factory reset.
+            resp.status                 = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+            break;
+        }
+        case 0xE71L:  // NOLINT(readability-magic-numbers) Example of a custom command.
+        {
+            char buf[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1];
+            (void) memcpy(&buf[0], &request.parameter.elements[0], request.parameter.count);
+            buf[request.parameter.count] = '\0';
+            // NOLINTNEXTLINE(cert-env33-c) insecure.
+            resp.status = (system(&buf[0]) == 0)  // You get the idea.
+                              ? uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS
+                              : uavcan_node_ExecuteCommand_Response_1_1_STATUS_FAILURE;
+            break;
+        }
+        default:
+        {
+            resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_COMMAND;
+            break;
+        }
+        }
+        byte_t resp_serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
+        size_t resp_serialized_size = sizeof(resp_serialized);
+        if (uavcan_node_ExecuteCommand_Response_1_1_serialize_(&resp, &resp_serialized[0], &resp_serialized_size) >= 0)
+        {
+            respond(iface_count, tx, request_transfer, resp_serialized_size, &resp_serialized[0]);
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+    else
+    {
+        (void) fprintf(stderr, "Malformed uavcan.node.ExecuteCommand.Request\n");
+    }
+}
+
 static void cbOnRegisterListRequest(struct RPCServer* const           self,
                                     struct UdpardRxRPCTransfer* const request_transfer,
                                     const size_t                      iface_count,
@@ -660,6 +730,7 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
         {
             (void) memset(msg.servers.mask_bitpacked_, 0x00, sizeof(msg.clients.mask_bitpacked_));
             const struct RPCServer* const srv[] = {&app->srv_get_node_info,
+                                                   &app->srv_execute_command,
                                                    &app->srv_register_list,
                                                    &app->srv_register_access};
             for (size_t i = 0; i < (sizeof(srv) / sizeof(srv[0])); i++)
@@ -1117,6 +1188,19 @@ static void* regStore(struct Register* const self, void* const context)
     return NULL;
 }
 
+/// This is designed for use with registerTraverse.
+/// The context is not used.
+static void* regReset(struct Register* const self, void* const context)
+{
+    (void) context;
+    assert(self != NULL);
+    if (self->persistent && self->remote_mutable)
+    {
+        (void) storageDrop(self->name);
+    }
+    return NULL;
+}
+
 /// Parse the addresses of the available local network interfaces from the given string.
 /// In a deeply embedded system this may be replaced by some other networking APIs, like LwIP.
 /// Invalid interface addresses are ignored; i.e., this is a best-effort parser.
@@ -1307,6 +1391,17 @@ int main(const int argc, char* const argv[])
         abort();
     }
     app.srv_get_node_info.user_reference = &app;
+    //
+    if (initRPCServer(&app.srv_execute_command,
+                      &app.rpc_dispatcher.udpard_rpc_dispatcher,
+                      uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_,
+                      uavcan_node_ExecuteCommand_Request_1_1_EXTENT_BYTES_,
+                      &cbOnExecuteCommandRequest) != 1)
+    {
+        abort();
+    }
+    app.srv_execute_command.user_reference = &app;
+    //
     if (initRPCServer(&app.srv_register_list,
                       &app.rpc_dispatcher.udpard_rpc_dispatcher,
                       uavcan_register_List_1_0_FIXED_PORT_ID_,
@@ -1316,6 +1411,7 @@ int main(const int argc, char* const argv[])
         abort();
     }
     app.srv_register_list.user_reference = app.reg_root;  // Cannot add new registers after this.
+    //
     if (initRPCServer(&app.srv_register_access,
                       &app.rpc_dispatcher.udpard_rpc_dispatcher,
                       uavcan_register_Access_1_0_FIXED_PORT_ID_,
@@ -1352,6 +1448,7 @@ int main(const int argc, char* const argv[])
     // Save registers immediately before restarting the node.
     // We don't access the storage during normal operation of the node because access is slow and is impossible to
     // perform without blocking; it also introduces undesirable complexities and complicates the failure modes.
+    if (!app.factory_reset_required)
     {
         size_t store_errors = 0;
         (void) registerTraverse(app.reg_root, &regStore, &store_errors);
@@ -1359,6 +1456,10 @@ int main(const int argc, char* const argv[])
         {
             (void) fprintf(stderr, "%zu registers could not be stored\n", store_errors);
         }
+    }
+    else
+    {
+        (void) registerTraverse(app.reg_root, &regReset, NULL);
     }
 
     // It is recommended to postpone restart until all frames are sent though.
