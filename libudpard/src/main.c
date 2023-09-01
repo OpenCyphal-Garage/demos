@@ -451,9 +451,27 @@ static void cbOnGetNodeInfoRequest(struct RPCServer* const           self,
                                    struct TxPipeline* const          tx)
 {
     assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
-    (void) iface_count;
-    (void) fprintf(stderr, "cbOnGetNodeInfoRequest\n");
-    (void) respond;
+    struct Application* const app = self->user_reference;
+    assert(app != NULL);
+    uavcan_node_GetInfo_Response_1_0 resp = {0};
+    resp.protocol_version.major           = UDPARD_CYPHAL_SPECIFICATION_VERSION_MAJOR;
+    resp.protocol_version.minor           = UDPARD_CYPHAL_SPECIFICATION_VERSION_MINOR;
+    resp.software_version.major           = VERSION_MAJOR;
+    resp.software_version.minor           = VERSION_MINOR;
+    resp.software_vcs_revision_id         = VCS_REVISION_ID;
+    (void) memcpy(&resp.unique_id[0], &app->unique_id[0], sizeof(resp.unique_id));
+    resp.name.count = strlen(NODE_NAME);
+    (void) memcpy(&resp.name.elements[0], NODE_NAME, resp.name.count);
+    uint8_t serialized[uavcan_node_GetInfo_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+    size_t  serialized_size = sizeof(serialized);
+    if (uavcan_node_GetInfo_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
+    {
+        respond(iface_count, tx, request_transfer, serialized_size, &serialized[0]);
+    }
+    else
+    {
+        assert(false);
+    }
 }
 
 static void cbOnRegisterListRequest(struct RPCServer* const           self,
@@ -462,9 +480,33 @@ static void cbOnRegisterListRequest(struct RPCServer* const           self,
                                     struct TxPipeline* const          tx)
 {
     assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
-    (void) iface_count;
-    (void) fprintf(stderr, "cbOnRegisterListRequest\n");
-    (void) respond;
+    uavcan_register_List_Request_1_0 request = {0};
+    byte_t                           payload[uavcan_register_List_Request_1_0_EXTENT_BYTES_];
+    size_t payload_size = udpardGather(request_transfer->base.payload, sizeof(payload), &payload[0]);
+    if (uavcan_register_List_Request_1_0_deserialize_(&request, &payload[0], &payload_size) >= 0)
+    {
+        const struct Register* const reg = registerFindByIndex((struct Register*) self->user_reference, request.index);
+        uavcan_register_List_Response_1_0 resp = {0};
+        if (reg != NULL)
+        {
+            resp.name.name.count = strlen(reg->name);
+            (void) memcpy(&resp.name.name.elements[0], reg->name, resp.name.name.count);
+        }
+        byte_t resp_serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+        size_t resp_serialized_size = sizeof(resp_serialized);
+        if (uavcan_register_List_Response_1_0_serialize_(&resp, &resp_serialized[0], &resp_serialized_size) >= 0)
+        {
+            respond(iface_count, tx, request_transfer, resp_serialized_size, &resp_serialized[0]);
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+    else
+    {
+        (void) fprintf(stderr, "Malformed uavcan.register.List.Request\n");
+    }
 }
 
 static void cbOnRegisterAccessRequest(struct RPCServer* const           self,
@@ -473,9 +515,52 @@ static void cbOnRegisterAccessRequest(struct RPCServer* const           self,
                                       struct TxPipeline* const          tx)
 {
     assert((self != NULL) && (request_transfer != NULL) && (tx != NULL));
-    (void) iface_count;
-    (void) fprintf(stderr, "cbOnRegisterAccessRequest\n");
-    (void) respond;
+    uavcan_register_Access_Request_1_0 request = {0};
+    byte_t                             payload[uavcan_register_Access_Request_1_0_EXTENT_BYTES_];
+    size_t payload_size = udpardGather(request_transfer->base.payload, sizeof(payload), &payload[0]);
+    if (uavcan_register_Access_Request_1_0_deserialize_(&request, &payload[0], &payload_size) >= 0)
+    {
+        // Locate the register by name.
+        char name_buf[uavcan_register_Name_1_0_name_ARRAY_CAPACITY_ + 1];
+        (void) memcpy(&name_buf[0], &request.name.name.elements[0], request.name.name.count);
+        name_buf[request.name.name.count] = '\0';
+        struct Register* const reg        = registerFindByName((struct Register*) self->user_reference, &name_buf[0]);
+        // Prepare the response with the default values.
+        uavcan_register_Access_Response_1_0 resp = {0};
+        uavcan_register_Value_1_0_select_empty_(&resp.value);
+        if (reg != NULL)
+        {
+            // Modify the register if modification is requested and is possible.
+            if (reg->remote_mutable)
+            {
+                (void) registerAssign(&reg->value, &request.value);  // No-op if the source is empty.
+            }
+            // Read the final value.
+            resp.timestamp.microsecond = getMonotonicMicroseconds();
+            if (reg->getter != NULL)
+            {
+                reg->value = reg->getter(reg);
+            }
+            resp.value      = reg->value;
+            resp.persistent = reg->persistent;
+            resp._mutable   = reg->remote_mutable;
+        }
+        // Serialize and send the response.
+        byte_t resp_serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+        size_t resp_serialized_size = sizeof(resp_serialized);
+        if (uavcan_register_Access_Response_1_0_serialize_(&resp, &resp_serialized[0], &resp_serialized_size) >= 0)
+        {
+            respond(iface_count, tx, request_transfer, resp_serialized_size, &resp_serialized[0]);
+        }
+        else
+        {
+            assert(false);
+        }
+    }
+    else
+    {
+        (void) fprintf(stderr, "Malformed uavcan.register.Access.Request\n");
+    }
 }
 
 /// Invoked every second.
@@ -805,12 +890,25 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
     transmitPendingFrames(ts_after_usec, app->iface_count, &app->tx_pipeline[0]);
 }
 
+/// Returns a register view exposing the detailed memory allocation statistics.
 static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const self)
 {
-    (void) self;
+    const struct ApplicationMemory* const mem = self->user_reference;
+    assert(mem != NULL);
     uavcan_register_Value_1_0 out = {0};
-    uavcan_register_Value_1_0_select_empty_(&out);
-    // TODO FIXME populate
+    uavcan_register_Value_1_0_select_natural64_(&out);
+    uavcan_primitive_array_Natural64_1_0* const val   = &out.natural64;
+    const struct MemoryBlockAllocator*          mba[] = {mem->session.user_reference,
+                                                         mem->fragment.user_reference,
+                                                         mem->payload.user_reference};
+    for (size_t i = 0; i < (sizeof(mba) / sizeof(mba[0])); i++)
+    {
+        val->value.elements[val->value.count++] = mba[i]->block_count;
+        val->value.elements[val->value.count++] = mba[i]->block_size_bytes;
+        val->value.elements[val->value.count++] = mba[i]->used_blocks_peak;
+        val->value.elements[val->value.count++] = mba[i]->request_count;
+        val->value.elements[val->value.count++] = mba[i]->oom_count;
+    }
     return out;
 }
 
@@ -866,7 +964,9 @@ static void regInitSubscriber(struct SubscriberRegisterSet* const self,
 
 /// Enters all registers into the tree and initializes their default value.
 /// The next step after this is to load the values from the non-volatile storage.
-static void initRegisters(struct ApplicationRegisters* const reg, struct Register** const root)
+static void initRegisters(struct ApplicationRegisters* const reg,
+                          struct ApplicationMemory* const    mem,
+                          struct Register** const            root)
 {
     // The standard node-ID register.
     registerInit(&reg->node_id, root, (const char*[]){"uavcan", "node", "id", NULL});
@@ -903,13 +1003,50 @@ static void initRegisters(struct ApplicationRegisters* const reg, struct Registe
 
     // An application-specific register exposing the memory usage of the application.
     registerInit(&reg->mem_info, root, (const char*[]){"sys", "info", "mem", NULL});
-    reg->mem_info.getter = &getRegisterSysInfoMem;
+    reg->mem_info.getter         = &getRegisterSysInfoMem;
+    reg->mem_info.user_reference = mem;
 
     // Publisher port registers.
     regInitPublisher(&reg->pub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
 
     // Subscriber port registers.
     regInitSubscriber(&reg->sub_data, root, "my_data", uavcan_primitive_array_Real32_1_0_FULL_NAME_AND_VERSION_);
+}
+
+/// This is designed for use with registerTraverse.
+/// The context points to a size_t containing the number of registers loaded.
+static void* regLoad(struct Register* const self, void* const context)
+{
+    assert((self != NULL) && (context != NULL));
+    byte_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+    size_t sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
+    // Ignore non-persistent registers and those whose values are computed dynamically (can't be stored).
+    // If the entry is not found or the stored value is invalid, the default value will be used.
+    if (self->persistent && (self->getter == NULL) && storageGet(self->name, &sr_size, &serialized[0]) &&
+        (uavcan_register_Value_1_0_deserialize_(&self->value, &serialized[0], &sr_size) >= 0))
+    {
+        ++(*(size_t*) context);
+    }
+    return NULL;
+}
+
+/// This is designed for use with registerTraverse.
+/// The context points to a size_t containing the number of registers that could not be stored.
+static void* regStore(struct Register* const self, void* const context)
+{
+    assert((self != NULL) && (context != NULL));
+    if (self->persistent && self->remote_mutable)
+    {
+        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+        size_t     sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
+        const bool ok      = (uavcan_register_Value_1_0_serialize_(&self->value, serialized, &sr_size) >= 0) &&
+                        storagePut(self->name, sr_size, &serialized[0]);
+        if (!ok)
+        {
+            ++(*(size_t*) context);
+        }
+    }
+    return NULL;
 }
 
 /// Parse the addresses of the available local network interfaces from the given string.
@@ -949,42 +1086,6 @@ static uint_fast8_t parseNetworkIfaceAddresses(const uavcan_primitive_String_1_0
     return count;
 }
 
-/// This is designed for use with registerTraverse.
-/// The context points to a size_t containing the number of registers loaded.
-static void* regLoad(struct Register* const self, void* const context)
-{
-    assert((self != NULL) && (context != NULL));
-    byte_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
-    size_t sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
-    // Ignore non-persistent registers and those whose values are computed dynamically (can't be stored).
-    // If the entry is not found or the stored value is invalid, the default value will be used.
-    if (self->persistent && (self->getter == NULL) && storageGet(self->name, &sr_size, &serialized[0]) &&
-        (uavcan_register_Value_1_0_deserialize_(&self->value, &serialized[0], &sr_size) >= 0))
-    {
-        ++(*(size_t*) context);
-    }
-    return NULL;
-}
-
-/// This is designed for use with registerTraverse.
-/// The context points to a size_t containing the number of registers that could not be stored.
-static void* regStore(struct Register* const self, void* const context)
-{
-    assert((self != NULL) && (context != NULL));
-    if (self->persistent && self->remote_mutable)
-    {
-        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
-        size_t     sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
-        const bool ok      = (uavcan_register_Value_1_0_serialize_(&self->value, serialized, &sr_size) >= 0) &&
-                        storagePut(self->name, sr_size, &serialized[0]);
-        if (!ok)
-        {
-            ++(*(size_t*) context);
-        }
-    }
-    return NULL;
-}
-
 /// This is needed to implement node restarting. Remove this if running on an embedded system.
 extern char** environ;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
@@ -993,7 +1094,7 @@ int main(const int argc, char* const argv[])
     // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
     // They may change when migrating between different versions of the library or when building the code for a
     // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
-    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 400, RESOURCE_LIMIT_SESSIONS);
+    MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 384, RESOURCE_LIMIT_SESSIONS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
@@ -1017,7 +1118,7 @@ int main(const int argc, char* const argv[])
     // The first thing to do during the application initialization is to load the register values from the non-volatile
     // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
     // information on how to reach the network and how to publish/subscribe to the subjects of interest.
-    initRegisters(&app.reg, &app.reg_root);
+    initRegisters(&app.reg, &app.memory, &app.reg_root);
     {
         size_t load_count = 0;
         (void) registerTraverse(app.reg_root, &regLoad, &load_count);
@@ -1136,6 +1237,7 @@ int main(const int argc, char* const argv[])
     {
         abort();
     }
+    app.srv_get_node_info.user_reference = &app;
     if (initRPCServer(&app.srv_register_list,
                       &app.rpc_dispatcher.udpard_rpc_dispatcher,
                       uavcan_register_List_1_0_FIXED_PORT_ID_,
@@ -1144,6 +1246,7 @@ int main(const int argc, char* const argv[])
     {
         abort();
     }
+    app.srv_register_list.user_reference = app.reg_root;  // Cannot add new registers after this.
     if (initRPCServer(&app.srv_register_access,
                       &app.rpc_dispatcher.udpard_rpc_dispatcher,
                       uavcan_register_Access_1_0_FIXED_PORT_ID_,
@@ -1152,6 +1255,7 @@ int main(const int argc, char* const argv[])
     {
         abort();
     }
+    app.srv_register_access.user_reference = app.reg_root;  // Cannot add new registers after this.
 
     // Main loop.
     (void) fprintf(stderr, "NODE STARTED\n");

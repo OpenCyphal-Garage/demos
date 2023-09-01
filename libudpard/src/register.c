@@ -8,6 +8,19 @@
 #include "crc64we.h"
 #include <assert.h>
 
+#define ASSIGN_SAME_TYPE(dst, src, type)                                                                    \
+    do                                                                                                      \
+    {                                                                                                       \
+        if (uavcan_register_Value_1_0_is_##type##_(dst) && uavcan_register_Value_1_0_is_##type##_(src))     \
+        {                                                                                                   \
+            for (size_t i = 0; i < nunavutChooseMin((dst)->type.value.count, (src)->type.value.count); ++i) \
+            {                                                                                               \
+                (dst)->type.value.elements[i] = (src)->type.value.elements[i];                              \
+            }                                                                                               \
+            return true;                                                                                    \
+        }                                                                                                   \
+    } while (0)
+
 static int_fast8_t treeSearchHash(void* const user_reference, const struct Cavl* const node)
 {
     const uint64_t lhs = *(const uint64_t*) user_reference;
@@ -57,6 +70,42 @@ void registerInit(struct Register* const  self,
     assert(res == &self->base);
 }
 
+bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src)
+{
+    if (uavcan_register_Value_1_0_is_empty_(dst))
+    {
+        *dst = *src;
+        return true;
+    }
+    if ((uavcan_register_Value_1_0_is_string_(dst) && uavcan_register_Value_1_0_is_string_(src)) ||
+        (uavcan_register_Value_1_0_is_unstructured_(dst) && uavcan_register_Value_1_0_is_unstructured_(src)))
+    {
+        *dst = *src;
+        return true;
+    }
+    if (uavcan_register_Value_1_0_is_bit_(dst) && uavcan_register_Value_1_0_is_bit_(src))
+    {
+        nunavutCopyBits(dst->bit.value.bitpacked,
+                        0,
+                        nunavutChooseMin(dst->bit.value.count, src->bit.value.count),
+                        src->bit.value.bitpacked,
+                        0);
+        return true;
+    }
+    ASSIGN_SAME_TYPE(dst, src, integer64);
+    ASSIGN_SAME_TYPE(dst, src, integer32);
+    ASSIGN_SAME_TYPE(dst, src, integer16);
+    ASSIGN_SAME_TYPE(dst, src, integer8);
+    ASSIGN_SAME_TYPE(dst, src, natural64);
+    ASSIGN_SAME_TYPE(dst, src, natural32);
+    ASSIGN_SAME_TYPE(dst, src, natural16);
+    ASSIGN_SAME_TYPE(dst, src, natural8);
+    ASSIGN_SAME_TYPE(dst, src, real64);
+    ASSIGN_SAME_TYPE(dst, src, real32);
+    ASSIGN_SAME_TYPE(dst, src, real16);
+    return false;
+}
+
 // NOLINTNEXTLINE(*-no-recursion)
 void* registerTraverse(struct Register* const root,
                        void* (*const fun)(struct Register*, void*),
@@ -78,9 +127,9 @@ void* registerTraverse(struct Register* const root,
     return out;
 }
 
-struct Register* registerFindByName(struct Register* const root, const size_t name_length, const char* const name)
+struct Register* registerFindByName(struct Register* const root, const char* const name)
 {
-    uint64_t name_hash = crc64we(name_length, name);
+    uint64_t name_hash = crc64weString(name);
     return (struct Register*) cavlSearch((Cavl**) &root, &name_hash, &treeSearchHash, NULL);
 }
 

@@ -46,6 +46,9 @@ struct Register
     uavcan_register_Value_1_0 value;
     /// If getter is non-NULL, the value will be obtained through this callback instead of the value field.
     uavcan_register_Value_1_0 (*getter)(struct Register*);
+
+    /// An arbitrary user-defined pointer. This is mostly useful with the callbacks.
+    void* user_reference;
 };
 
 /// Inserts the register into the tree. The caller must initialize the value/getter fields after this call.
@@ -62,6 +65,15 @@ void registerInit(struct Register* const  self,
                   struct Register** const root,
                   const char** const      null_terminated_name_fragments);
 
+/// Copy one value to the other if their types and dimensionality are the same or an automatic conversion is possible.
+/// If the destination is empty, it is simply replaced with the source (assignment always succeeds).
+/// Assignment always fails if the source is empty, unless the destination is also empty.
+/// The return value is true if the assignment has been performed, false if it is not possible;
+/// in the latter case the destination is not modified.
+///
+/// This function is useful when accepting register write requests from the network.
+bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src);
+
 /// Traverse all registers in their index order, invoke the functor on each.
 /// The user reference will be passed to the functor as-is.
 /// Traversal will stop either when all registers are traversed or when the functor returns non-NULL.
@@ -71,8 +83,6 @@ void* registerTraverse(struct Register* const root,
                        void* const user_reference);
 
 /// These search functions are needed to implement the Cyphal register API.
-/// The name length is provided to simplify coupling with the DSDL-generated code; the name does not have to be
-/// null-terminated.
 /// Returns NULL if not found or the arguments are invalid.
-struct Register* registerFindByName(struct Register* const root, const size_t name_length, const char* const name);
+struct Register* registerFindByName(struct Register* const root, const char* const name);
 struct Register* registerFindByIndex(struct Register* const root, const size_t index);

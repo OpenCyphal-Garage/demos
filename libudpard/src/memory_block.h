@@ -27,11 +27,21 @@
     _Alignas(max_align_t) static uint_least8_t _name##_pool[(_block_size_bytes) * (_block_count)]; \
     struct MemoryBlockAllocator _name = memoryBlockInit(sizeof(_name##_pool), &_name##_pool[0], (_block_size_bytes))
 
+/// The user shall not attempt to change any of the fields manually.
 struct MemoryBlockAllocator
 {
-    size_t allocated_blocks;  ///< Read-only diagnostic counter.
-    size_t block_size_bytes;  ///< Do not change.
-    void*  head;              ///< Do not change.
+    // Constant pool parameters.
+    size_t block_count;
+    size_t block_size_bytes;
+
+    // Read-only diagnostic values.
+    size_t   used_blocks;       ///< Blocks in use at the moment.
+    size_t   used_blocks_peak;  ///< Maximum number of blocks used at any point in time.
+    uint64_t request_count;     ///< Total number of allocation requests.
+    uint64_t oom_count;         ///< Total number of out-of-memory errors.
+
+    // Private fields.
+    void* head;
 };
 
 /// Constructs a memory block allocator bound to the specified memory pool.
@@ -58,7 +68,7 @@ struct MemoryBlockAllocator memoryBlockInit(const size_t pool_size_bytes,
     {
         *(void**) (void*) (ptr + (i * bs)) = ((i + 1) < block_count) ? ((void*) (ptr + ((i + 1) * bs))) : NULL;
     }
-    const struct MemoryBlockAllocator out = {.allocated_blocks = 0, .block_size_bytes = bs, .head = ptr};
+    const struct MemoryBlockAllocator out = {.block_count = block_count, .block_size_bytes = bs, .head = ptr};
     return out;
 }
 
@@ -67,14 +77,21 @@ void* memoryBlockAllocate(void* const user_reference, const size_t size)
     void*                              out  = NULL;
     struct MemoryBlockAllocator* const self = (struct MemoryBlockAllocator*) user_reference;
     assert(self != NULL);
+    self->request_count++;
     if ((size > 0) && (size <= self->block_size_bytes))
     {
         out = self->head;
         if (self->head != NULL)
         {
             self->head = *(void**) self->head;
-            self->allocated_blocks++;
+            self->used_blocks++;
+            self->used_blocks_peak =
+                (self->used_blocks > self->used_blocks_peak) ? self->used_blocks : self->used_blocks_peak;
         }
+    }
+    if (out == NULL)
+    {
+        self->oom_count++;
     }
     return out;
 }
@@ -87,6 +104,7 @@ void memoryBlockDeallocate(void* const user_reference, const size_t size, void* 
     {
         *(void**) pointer = self->head;
         self->head        = pointer;
-        self->allocated_blocks--;
+        assert(self->used_blocks > 0);
+        self->used_blocks--;
     }
 }
