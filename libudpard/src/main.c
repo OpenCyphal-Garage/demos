@@ -444,10 +444,43 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
 {
-    (void) self;
-    (void) transfer;
-    // TODO FIXME
-    (void) fprintf(stderr, "cbOnMyData: %zu bytes\n", transfer->payload_size);
+    uavcan_primitive_array_Real32_1_0 msg = {0};
+    byte_t                            payload[uavcan_primitive_array_Real32_1_0_EXTENT_BYTES_];
+    size_t                            payload_size = udpardGather(transfer->payload, sizeof(payload), &payload[0]);
+    if (uavcan_primitive_array_Real32_1_0_deserialize_(&msg, &payload[0], &payload_size) >= 0)
+    {
+        // Reverse the order of the elements.
+        for (size_t i = 0; i < msg.value.count / 2; i++)
+        {
+            const float tmp                             = msg.value.elements[i];
+            msg.value.elements[i]                       = msg.value.elements[msg.value.count - i - 1];
+            msg.value.elements[msg.value.count - i - 1] = tmp;
+        }
+        // Serialize and publish.
+        struct Application* const app = self->user_reference;
+        if (app->pub_data.subject_id <= UDPARD_SUBJECT_ID_MAX)
+        {
+            byte_t serialized[uavcan_primitive_array_Real32_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+            size_t serialized_size = sizeof(serialized);
+            if (uavcan_primitive_array_Real32_1_0_serialize_(&msg, &serialized[0], &serialized_size) >= 0)
+            {
+                assert(app != NULL);
+                publish(app->iface_count, &app->tx_pipeline[0], &app->pub_data, serialized_size, &serialized[0]);
+            }
+            else
+            {
+                assert(false);
+            }
+        }
+        else
+        {
+            (void) fprintf(stderr, "Data publisher is not enabled\n");
+        }
+    }
+    else
+    {
+        (void) fprintf(stderr, "Malformed uavcan.primitive.array.Real32.1.0\n");
+    }
 }
 
 static void cbOnGetNodeInfoRequest(struct RPCServer* const           self,
@@ -1321,7 +1354,7 @@ int main(const int argc, char* const argv[])
                   1 * MEGA);
     initPublisher(&app.pub_data,
                   app.reg.pub_data.priority.value.natural8.value.elements[0],
-                  app.reg.pub_data.priority.value.natural16.value.elements[0],
+                  app.reg.pub_data.base.id.value.natural16.value.elements[0],
                   50 * KILO);
 
     // Initialize the subscribers. They are not dependent on the local node-ID value.
