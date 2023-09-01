@@ -5,9 +5,9 @@
 ///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
 ///                             /_/                     /____/_/
 ///
-/// This file contains a fairly standard O(1) free list block allocator, aka block pool allocator.
+/// A header-only implementation of a fairly standard O(1) free list block allocator, aka block pool allocator.
 /// It is not required to use LibUDPard, as the library can be used with an ordinary malloc()/free() or
-/// perhaps o1heap (https://github.com/pavel-kirienko/o1heap) if the application requires a more sophisticated
+/// perhaps O1Heap (https://github.com/pavel-kirienko/o1heap) if the application requires a more sophisticated
 /// memory management strategy.
 ///
 /// This software is distributed under the terms of the MIT License.
