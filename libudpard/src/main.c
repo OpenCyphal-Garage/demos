@@ -59,6 +59,8 @@
 /// The connectivity can be changed after the node is launched via the register API.
 /// LibUDPard natively supports non-redundant, doubly-redundant, and triply-redundant network interfaces
 /// for fault tolerance.
+/// A deeply embedded application may instead run a dynamic DHCP client to obtain its address(es) and use that,
+/// or in the simplest case it may simply default to some hard-coded address (likely Class C).
 #define DEFAULT_IFACE "127.0.0.1"
 
 /// The maximum number of UDP datagrams enqueued in the TX queue at any given time.
@@ -82,10 +84,11 @@
 typedef uint_least8_t byte_t;
 
 /// Per the LibUDPard design, there is a dedicated TX pipeline per local network iface.
+/// A single pipeline is used for all kinds of outgoing transfers: message publications, requests, and responses.
 struct TxPipeline
 {
     struct UdpardTx udpard_tx;
-    UDPTxHandle     io;
+    UDPTxHandle     io;  ///< The socket that is used for transmitting on this iface.
 };
 
 /// There is one RPC dispatcher in the entire application. It aggregates all RX RPC ports for all network ifaces.
@@ -96,21 +99,24 @@ struct RPCDispatcher
     UDPRxHandle                  io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
 };
 
+/// There needs to be one instance of this type per subject the application wants to publish on.
+/// E.g., for the heartbeat, etc.
 struct Publisher
 {
-    UdpardPortID        subject_id;
+    UdpardPortID        subject_id;  ///< If invalid, this publisher is disabled.
     enum UdpardPriority priority;
     UdpardMicrosecond   tx_timeout_usec;
     UdpardTransferID    transfer_id;
 };
 
+/// There needs to be one instance of this type per subject the application wants to subscribe to.
 struct Subscriber;
 typedef void (*SubscriberCallback)(struct Subscriber* const self, struct UdpardRxTransfer* const transfer);
 struct Subscriber
 {
     struct UdpardRxSubscription subscription;
-    UDPRxHandle                 io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];
-    bool                        enabled;  ///< True if in use.
+    UDPRxHandle io[UDPARD_NETWORK_INTERFACE_COUNT_MAX];  ///< Each subscription needs a separate socket per iface.
+    bool        enabled;                                 ///< True if in use.
     /// The caller will free the transfer payload after this callback returns.
     /// If the callback would like to prevent that (e.g., the payload is needed for later processing),
     /// it can erase the payload pointers from the transfer object.
@@ -118,6 +124,9 @@ struct Subscriber
     void*              user_reference;
 };
 
+/// There needs to be one instance of this type per RPC service the application wants to serve.
+/// No sockets are needed for this one as the reception is managed by the RPC dispatcher (see above) and
+/// transmission is managed by the TX pipelines.
 struct RPCServer;
 // The TX pipelines are passed to let the handler transmit the response.
 typedef void (*RPCServerCallback)(struct RPCServer* const           self,
@@ -135,6 +144,8 @@ struct RPCServer
     void*             user_reference;
 };
 
+/// For more information about registers, please refer to "register.h" and the standard DSDL definition
+/// "uavcan.register.Access".
 /// The port register sets are helpers to simplify the implementation of port configuration/introspection registers.
 struct PortRegisterSet
 {
@@ -151,6 +162,7 @@ struct SubscriberRegisterSet
     struct PortRegisterSet base;
 };
 
+/// A set of registers specific to this application. Feel free to extend.
 struct ApplicationRegisters
 {
     struct Register              node_id;           ///< uavcan.node.id             : natural16[1]
@@ -162,6 +174,9 @@ struct ApplicationRegisters
     struct SubscriberRegisterSet sub_data;
 };
 
+/// These different memory allocators are needed for LibUDPard.
+/// They can be replaced with a single heap allocator, but for the sake of a good illustration we use simple
+/// fixed-size block pools instead.
 struct ApplicationMemory
 {
     struct UdpardMemoryResource session;
@@ -169,6 +184,7 @@ struct ApplicationMemory
     struct UdpardMemoryResource payload;
 };
 
+/// The god object.
 struct Application
 {
     UdpardMicrosecond started_at;
@@ -176,7 +192,7 @@ struct Application
     /// The unique-ID of the local node. This value is initialized once at startup.
     byte_t unique_id[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_];
 
-    /// This flag is raised when the node is requested to restart.
+    /// These flags are raised in response to external requests.
     bool restart_required;
     bool factory_reset_required;
 
@@ -252,23 +268,6 @@ static void getUniqueID(byte_t out[uavcan_node_GetInfo_Response_1_0_unique_id_AR
     }
 }
 
-static int16_t initRPCServer(struct RPCServer* const             self,
-                             struct UdpardRxRPCDispatcher* const dispatcher,
-                             const UdpardPortID                  service_id,
-                             const size_t                        request_extent,
-                             const RPCServerCallback             handler)
-{
-    (void) memset(self, 0, sizeof(*self));
-    self->enabled = service_id <= UDPARD_SUBJECT_ID_MAX;
-    int16_t res   = 0;
-    if (self->enabled)
-    {
-        self->handler = handler;
-        res = (int16_t) udpardRxRPCDispatcherListen(dispatcher, &self->base, service_id, true, request_extent);
-    }
-    return res;
-}
-
 /// The dispatcher passed here shall already be initialized.
 static int16_t startRPCDispatcher(struct RPCDispatcher* const self,
                                   const UdpardNodeID          local_node_id,
@@ -294,6 +293,23 @@ static int16_t startRPCDispatcher(struct RPCDispatcher* const self,
                 break;
             }
         }
+    }
+    return res;
+}
+
+static int16_t initRPCServer(struct RPCServer* const             self,
+                             struct UdpardRxRPCDispatcher* const dispatcher,
+                             const UdpardPortID                  service_id,
+                             const size_t                        request_extent,
+                             const RPCServerCallback             handler)
+{
+    (void) memset(self, 0, sizeof(*self));
+    self->enabled = service_id <= UDPARD_SUBJECT_ID_MAX;
+    int16_t res   = 0;
+    if (self->enabled)
+    {
+        self->handler = handler;
+        res = (int16_t) udpardRxRPCDispatcherListen(dispatcher, &self->base, service_id, true, request_extent);
     }
     return res;
 }
@@ -449,7 +465,7 @@ static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* c
     size_t                            payload_size = udpardGather(transfer->payload, sizeof(payload), &payload[0]);
     if (uavcan_primitive_array_Real32_1_0_deserialize_(&msg, &payload[0], &payload_size) >= 0)
     {
-        // Reverse the order of the elements.
+        // Process the received data. In this demo we reverse the array and publish the result.
         for (size_t i = 0; i < msg.value.count / 2; i++)
         {
             const float tmp                             = msg.value.elements[i];
@@ -721,6 +737,11 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
 {
     assert(app != NULL);
     (void) monotonic_time;
+    // Publish uavcan.node.port.List periodically. This standard message is used to inform other network participants
+    // about the topics we publish/subscribe to and the RPC-services we invoke and serve.
+    // This information is important for diagnostics and can also be leveraged by self-configuring network bridges;
+    // e.g., for routing data between CAN and UDP segments as shown at
+    // https://forum.opencyphal.org/t/cyphal-udp-routing-over-multiple-networks/1657/7.
     if (app->local_node_id <= UDPARD_NODE_ID_MAX)
     {
         uavcan_node_port_List_1_0 msg;  // Default initialization skipped because the struct is large.
@@ -791,6 +812,8 @@ static void handle01HzLoop(struct Application* const app, const UdpardMicrosecon
     }
 }
 
+/// Checks whether any pending TX datagrams can be written into sockets.
+/// This is non-blocking, returns immediately.
 static void transmitPendingFrames(const UdpardMicrosecond  time_usec,
                                   const size_t             iface_count,
                                   struct TxPipeline* const tx_pipelines)
@@ -923,9 +946,9 @@ static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timest
     return out;
 }
 
-/// Block and process pending frames from the RX sockets of all network interfaces and feed them into the library;
-/// also push the frames from the TX queues into their respective sockets.
-/// May unblock early.
+/// Blocks and processes pending frames from the RX sockets of all network interfaces and feeds them into the library;
+/// also pushes the frames from the TX queues into their respective sockets.
+/// Unblocks either when there is data to handle or when the deadline is reached. May unblock early.
 static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* const app)
 {
     // Try pushing pending TX frames ahead of time; this is non-blocking.
@@ -1062,7 +1085,10 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
     transmitPendingFrames(ts_after_usec, app->iface_count, &app->tx_pipeline[0]);
 }
 
-/// Returns a register view exposing the detailed memory allocation statistics.
+/// Returns a register view exposing the detailed memory allocation statistics to remote nodes.
+/// This is useful for diagnostics. Naturally, the application can define an arbitrary number of such registers
+/// for advanced diagnostics, and even for direct low-level state mutation if needed (this may be useful during
+/// development or for advanced maintenance). For example, it could expose performance counters in this way.
 static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const self)
 {
     const struct ApplicationMemory* const mem = self->user_reference;
@@ -1084,6 +1110,7 @@ static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const se
     return out;
 }
 
+/// A helper for registering registers of a given port.
 static void regInitPort(struct PortRegisterSet* const self,
                         struct Register** const       root,
                         const char* const             prefix,
@@ -1107,6 +1134,7 @@ static void regInitPort(struct PortRegisterSet* const self,
     self->type.persistent = true;
 }
 
+/// A helper for registering registers of a given publisher port.
 static void regInitPublisher(struct PublisherRegisterSet* const self,
                              struct Register** const            root,
                              const char* const                  port_name,
@@ -1124,6 +1152,7 @@ static void regInitPublisher(struct PublisherRegisterSet* const self,
     self->priority.remote_mutable                   = true;
 }
 
+/// A helper for registering registers of a given subscriber port.
 static void regInitSubscriber(struct SubscriberRegisterSet* const self,
                               struct Register** const             root,
                               const char* const                   port_name,
@@ -1134,8 +1163,9 @@ static void regInitSubscriber(struct SubscriberRegisterSet* const self,
     regInitPort(&self->base, root, "sub", port_name, port_type);
 }
 
-/// Enters all registers into the tree and initializes their default value.
-/// The next step after this is to load the values from the non-volatile storage.
+/// Initializes all registers with their default values.
+/// The next step after this is to load the values from the non-volatile storage,
+/// thus overriding the defaults with user-configured parameters.
 static void initRegisters(struct ApplicationRegisters* const reg,
                           struct ApplicationMemory* const    mem,
                           struct Register** const            root)
@@ -1279,10 +1309,13 @@ int main(const int argc, char* const argv[])
     // The block size values used here are derived from the sizes of the structs defined in LibUDPard and the MTU.
     // They may change when migrating between different versions of the library or when building the code for a
     // different platform, so it may be desirable to choose conservative values here (i.e. larger than necessary).
+    // Small MCUs may have smaller sizeof(void*) and sizeof(size_t) (e.g., on AVR these are 2 bytes only),
+    // which makes these sizes quite a bit smaller, too.
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_session, 384, RESOURCE_LIMIT_SESSIONS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
+    // Set up the god application object.
     struct Application app = {
         .memory =
             {
@@ -1300,6 +1333,7 @@ int main(const int argc, char* const argv[])
         .local_node_id = UDPARD_NODE_ID_UNSET,
     };
     getUniqueID(&app.unique_id[0]);
+
     // The first thing to do during the application initialization is to load the register values from the non-volatile
     // configuration storage. Non-volatile configuration is essential for most Cyphal nodes because it contains
     // information on how to reach the network and how to publish/subscribe to the subjects of interest.
@@ -1319,7 +1353,9 @@ int main(const int argc, char* const argv[])
     // Parse the iface addresses given via the standard iface register.
     app.iface_count = parseNetworkIfaceAddresses(&app.reg.udp_iface.value._string, &app.ifaces[0]);
     if (app.iface_count == 0)  // In case of error we fall back to the local loopback to keep the node reachable.
-    {
+    {  // This can be replaced with any other default value that makes sense for the application.
+        // A deeply embedded system may perform DHCP allocation instead and use the dynamically allocated IP addresses
+        // if no addresses are given explicitly.
         (void) fprintf(stderr, "Using the loopback iface because the iface register does not specify valid ifaces\n");
         app.iface_count = 1;
         app.ifaces[0]   = udpParseIfaceAddress(DEFAULT_IFACE);
@@ -1396,7 +1432,7 @@ int main(const int argc, char* const argv[])
     }
 
     // Initialize the RPC services. First, we initialize the dispatcher.
-    // If the local node-ID is already known, we must start the dispatcher right away;
+    // If the local node-ID is already known, we can start the dispatcher right away;
     // otherwise, the starting part will be postponed until the PnP node-ID allocation is finished.
     if (udpardRxRPCDispatcherInit(&app.rpc_dispatcher.udpard_rpc_dispatcher, rx_memory) != 0)
     {
@@ -1455,7 +1491,7 @@ int main(const int argc, char* const argv[])
     }
     app.srv_register_access.user_reference = app.reg_root;  // Cannot add new registers after this.
 
-    // Main loop.
+    // RUN THE MAIN LOOP.
     (void) fprintf(stderr, "NODE STARTED\n");
     app.started_at                       = getMonotonicMicroseconds();
     UdpardMicrosecond next_1_hz_iter_at  = app.started_at + MEGA;

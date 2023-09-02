@@ -15,6 +15,14 @@
 /// to quickly find the register by name in logarithmic time. The tree is also traversed in the index order to
 /// implement the index-based access.
 ///
+/// The intended usage is to initialize all registers at boot-up and then never modify the tree again.
+/// Persistent registers (those that are stored in the non-volatile storage, typically these are the node configuration
+/// parameters) should be read from the storage once during boot-up, in order to relieve the application from accessing
+/// the potentially slow and time-unpredictable blocking storage API during normal operation. If changes need to be
+/// made to the non-volatile storage, they should be made immediately before the application terminates (before reboot),
+/// when the application is no longer confined by the stringent real-time requirements and can invoke the blocking
+/// storage API safely.
+///
 /// This software is distributed under the terms of the MIT License.
 /// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
 /// Copyright Amazon.com Inc. or its affiliates.
@@ -78,6 +86,8 @@ bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_
 /// The user reference will be passed to the functor as-is.
 /// Traversal will stop either when all registers are traversed or when the functor returns non-NULL.
 /// Returns the pointer returned by the functor or NULL if all registers were traversed.
+/// This can be used for loading the persistent registers from the non-volatile storage at boot-up
+/// and for storing them back before reboot, among other things.
 void* registerTraverse(struct Register* const root,
                        void* (*const fun)(struct Register*, void*),
                        void* const user_reference);
