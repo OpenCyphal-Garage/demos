@@ -10,4 +10,3 @@
 [submodule "submodules/libudpard"]
 	path = submodules/libudpard
 	url = https://github.com/OpenCyphal-Garage/libudpard
-	branch = e2e
