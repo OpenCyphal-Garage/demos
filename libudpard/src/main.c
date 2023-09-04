@@ -382,10 +382,11 @@ static void publish(const size_t             iface_count,
                                deadline,
                                pub->priority,
                                pub->subject_id,
-                               &pub->transfer_id,
+                               pub->transfer_id,
                                (struct UdpardPayload){.size = payload_size, .data = payload},
                                NULL);
     }
+    pub->transfer_id++;
 }
 
 /// A helper for transmitting an RPC-service response over all available redundant network interfaces.
@@ -460,6 +461,10 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
 {
+    (void) fprintf(stderr,
+                   "Received my_data with transfer-ID %lu from node %u\n",
+                   transfer->transfer_id,
+                   transfer->source_node_id);
     uavcan_primitive_array_Real32_1_0 msg = {0};
     byte_t                            payload[uavcan_primitive_array_Real32_1_0_EXTENT_BYTES_];
     size_t                            payload_size = udpardGather(transfer->payload, sizeof(payload), &payload[0]);
