@@ -147,6 +147,15 @@ The subscriber we launched earlier will show the messages published by our node:
   value: [70.0, 60.0, 50.0]
 ```
 
+The current status of the memory allocators can be checked by reading the corresponding diagnostic register
+as shown below.
+Diagnostic registers are a powerful tool for building advanced introspection interfaces and can be used to expose
+and even modify arbitrary internal states of the application over the network.
+
+```yaml
+y r 65532 sys.info.mem
+```
+
 Publishing and subscribing using different remote machines (instead of using the local loopback interface)
 is left as an exercise to the reader.
 Cyphal/UDP is a masterless peer protocol that does not require manual configuration of the networking infrastructure.

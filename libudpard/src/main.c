@@ -566,6 +566,7 @@ static void cbOnExecuteCommandRequest(struct RPCServer* const           self,
             resp.status                 = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
             break;
         }
+#ifdef EVIL  // This example is disabled as it is insecure; however, it may be useful for advanced diagnostics.
         case 0xE71L:  // NOLINT(readability-magic-numbers) Example of a custom command.
         {
             char buf[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1];
@@ -577,6 +578,7 @@ static void cbOnExecuteCommandRequest(struct RPCServer* const           self,
                               : uavcan_node_ExecuteCommand_Response_1_1_STATUS_FAILURE;
             break;
         }
+#endif
         default:
         {
             resp.status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_BAD_COMMAND;
