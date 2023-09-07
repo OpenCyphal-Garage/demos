@@ -11,8 +11,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
 # Set up static analysis.
-set(NO_STATIC_ANALYSIS OFF CACHE BOOL "disable static analysis")
-if (NOT NO_STATIC_ANALYSIS)
+set(STATIC_ANALYSIS OFF CACHE BOOL "enable static analysis")
+if (STATIC_ANALYSIS)
     # clang-tidy (separate config files per directory)
     find_program(clang_tidy NAMES clang-tidy)
     if (NOT clang_tidy)
@@ -92,5 +92,7 @@ set_target_properties(
             -Wundef -Wconversion -Wtype-limits -Wsign-conversion -Wcast-align -Wmissing-declarations"
         C_STANDARD 11
         C_EXTENSIONS OFF
-        C_CLANG_TIDY "${clang_tidy}"
 )
+if (STATIC_ANALYSIS)
+    set_target_properties(demo PROPERTIES C_CLANG_TIDY "${clang_tidy}")
+endif ()
