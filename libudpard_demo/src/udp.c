@@ -196,10 +196,18 @@ int16_t udpWait(const uint64_t        timeout_usec,
                 const size_t          rx_count,
                 UDPRxAwaitable* const rx)
 {
-    int16_t res = -EINVAL;
-    if ((tx != NULL) && (rx != NULL) && ((tx_count + rx_count) > 0))
+    int16_t       res         = -EINVAL;
+    const size_t  total_count = tx_count + rx_count;
+    struct pollfd fds[total_count];  // Violates MISRA-C:2012 Rule 18.8; replace with a fixed limit.
+    // IEEE Std 1003.1 requires:
+    //
+    //  The implementation shall support one or more programming environments in which the width of nfds_t is
+    //  no greater than the width of type long.
+    //
+    // Per C99, the minimum size of "long" is 32 bits, hence we compare against INT32_MAX.
+    // OPEN_MAX is not used because it is not guaranteed to be defined nor the limit has to be static.
+    if ((tx != NULL) && (rx != NULL) && (total_count > 0) && (total_count <= INT32_MAX))
     {
-        struct pollfd fds[tx_count + rx_count];  // Violates MISRA-C:2012 Rule 18.8; replace with a fixed limit.
         {
             size_t idx = 0;
             for (; idx < tx_count; idx++)
@@ -214,7 +222,7 @@ int16_t udpWait(const uint64_t        timeout_usec,
             }
         }
         const uint64_t timeout_ms = timeout_usec / 1000U;
-        const int poll_result = poll(fds, tx_count + rx_count, (int) ((timeout_ms > INT_MAX) ? INT_MAX : timeout_ms));
+        const int poll_result = poll(fds, (nfds_t) total_count, (int) ((timeout_ms > INT_MAX) ? INT_MAX : timeout_ms));
         if (poll_result >= 0)
         {
             res        = 0;
