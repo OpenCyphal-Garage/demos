@@ -47,9 +47,9 @@ struct MemoryBlockAllocator
 /// Constructs a memory block allocator bound to the specified memory pool.
 /// The block count will be deduced from the pool size and block size; both may be adjusted to ensure alignment.
 /// If the pool or block size are not properly aligned, some memory may need to be wasted to enforce alignment.
-struct MemoryBlockAllocator memoryBlockInit(const size_t pool_size_bytes,
-                                            void* const  pool,
-                                            const size_t block_size_bytes)
+static struct MemoryBlockAllocator memoryBlockInit(const size_t pool_size_bytes,
+                                                   void* const  pool,
+                                                   const size_t block_size_bytes)
 {
     // Enforce alignment and padding of the input arguments. We may waste some space as a result.
     const size_t   bs       = (block_size_bytes + sizeof(max_align_t) - 1U) & ~(sizeof(max_align_t) - 1U);
@@ -72,7 +72,7 @@ struct MemoryBlockAllocator memoryBlockInit(const size_t pool_size_bytes,
     return out;
 }
 
-void* memoryBlockAllocate(void* const user_reference, const size_t size)
+static void* memoryBlockAllocate(void* const user_reference, const size_t size)
 {
     void*                              out  = NULL;
     struct MemoryBlockAllocator* const self = (struct MemoryBlockAllocator*) user_reference;
@@ -96,7 +96,7 @@ void* memoryBlockAllocate(void* const user_reference, const size_t size)
     return out;
 }
 
-void memoryBlockDeallocate(void* const user_reference, const size_t size, void* const pointer)
+static void memoryBlockDeallocate(void* const user_reference, const size_t size, void* const pointer)
 {
     struct MemoryBlockAllocator* const self = (struct MemoryBlockAllocator*) user_reference;
     assert((self != NULL) && (size <= self->block_size_bytes));
