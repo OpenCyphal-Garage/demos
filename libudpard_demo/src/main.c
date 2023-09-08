@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <inttypes.h>
 #include <errno.h>
 #include <time.h>
 
@@ -462,7 +463,7 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
 {
     (void) fprintf(stderr,
-                   "Received my_data with transfer-ID %lu from node %u\n",
+                   "Received my_data with transfer-ID %" PRIu64 " from node %u\n",
                    transfer->transfer_id,
                    transfer->source_node_id);
     uavcan_primitive_array_Real32_1_0 msg = {0};
@@ -566,7 +567,7 @@ static void cbOnExecuteCommandRequest(struct RPCServer* const           self,
             resp.status                 = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
             break;
         }
-#ifdef EVIL  // This example is disabled as it is insecure; however, it may be useful for advanced diagnostics.
+#ifdef EVIL           // This example is disabled as it is insecure; however, it may be useful for advanced diagnostics.
         case 0xE71L:  // NOLINT(readability-magic-numbers) Example of a custom command.
         {
             char buf[uavcan_node_ExecuteCommand_Request_1_1_parameter_ARRAY_CAPACITY_ + 1];
@@ -926,7 +927,7 @@ static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timest
     case 1:
     {
         (void) fprintf(stderr,
-                       "RPC request on service %u from client %u with transfer-ID %lu via iface #%u\n",
+                       "RPC request on service %u from client %u with transfer-ID %" PRIu64 " via iface #%u\n",
                        transfer.service_id,
                        transfer.base.source_node_id,
                        transfer.base.transfer_id,
@@ -1322,7 +1323,7 @@ int main(const int argc, char* const argv[])
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
-    // Set up the god application object.
+    // Set up the dog application object.
     struct Application app = {
         .memory =
             {
