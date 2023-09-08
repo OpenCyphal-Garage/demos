@@ -26,7 +26,7 @@ Build the demo:
 
 ```shell
 git clone --recursive https://github.com/OpenCyphal/demos
-cd demos/libudpard
+cd demos/libudpard_demo
 mkdir build && cd build
 cmake .. && make
 ```
