@@ -132,13 +132,16 @@ int16_t udpRxInit(UDPRxHandle* const self,
         // Binding to the multicast group address is necessary on GNU/Linux: https://habr.com/ru/post/141021/
         // Binding to a multicast address is not allowed on Windows, and it is not necessary there;
         // instead, one should bind to INADDR_ANY with the specific port.
-        ok = ok && (bind(self->fd,
-                         (struct sockaddr*) &(struct sockaddr_in){
-                             .sin_family = AF_INET,
-                             .sin_addr   = {.s_addr = htonl(multicast_group)},
-                             .sin_port   = htons(remote_port),
-                         },
-                         sizeof(struct sockaddr_in)) == 0);
+        const struct sockaddr_in bind_addr = {
+            .sin_family = AF_INET,
+#ifdef _WIN32
+            .sin_addr = {.s_addr = INADDR_ANY},
+#else
+            .sin_addr = {.s_addr = htonl(multicast_group)},
+#endif
+            .sin_port = htons(remote_port),
+        };
+        ok = ok && (bind(self->fd, (struct sockaddr*) &bind_addr, sizeof(bind_addr)) == 0);
         // INADDR_ANY in IP_ADD_MEMBERSHIP doesn't actually mean "any", it means "choose one automatically";
         // see https://tldp.org/HOWTO/Multicast-HOWTO-6.html. This is why we have to specify the interface explicitly.
         // This is needed to inform the networking stack of which local interface to use for IGMP membership reports.
