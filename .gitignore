@@ -39,6 +39,9 @@ cmake-build*/
 .compiled/
 .transpiled/
 
+# Node register files
+*.cfg
+
 # IDE and tools
 .gdbinit
 **/.idea/*

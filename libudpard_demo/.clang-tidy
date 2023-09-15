@@ -1,0 +1,37 @@
+---
+Checks: >-
+  boost-*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  google-*,
+  hicpp-*,
+  llvm-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -google-readability-todo,
+  -readability-avoid-const-params-in-decls,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -bugprone-easily-swappable-parameters,
+  -llvm-header-guard,
+  -llvm-include-order,
+  -cert-dcl03-c,
+  -hicpp-static-assert,
+  -misc-static-assert,
+  -modernize-macro-to-enum,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+CheckOptions:
+  - key: readability-function-cognitive-complexity.Threshold
+    value: '99'
+  - key:   readability-magic-numbers.IgnoredIntegerValues
+    value: '1;2;3;4;5;8;10;16;20;32;50;60;64;100;128;256;500;512;1000'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: file
+...
