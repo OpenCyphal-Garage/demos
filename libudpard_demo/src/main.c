@@ -869,9 +869,9 @@ static int16_t acceptDatagramForSubscription(const UdpardMicrosecond            
 {
     int16_t                 out      = 0;
     struct UdpardRxTransfer transfer = {0};
-    const int16_t           rx_res =
+    const int16_t           rx_result =
         (int16_t) udpardRxSubscriptionReceive(&sub->subscription, timestamp_usec, payload, iface_index, &transfer);
-    switch (rx_res)
+    switch (rx_result)
     {
     case 1:
     {
@@ -897,8 +897,8 @@ static int16_t acceptDatagramForSubscription(const UdpardMicrosecond            
     case 0:
         break;  // No transfer available yet.
     default:
-        assert(rx_res == -UDPARD_ERROR_MEMORY);
-        out = rx_res;
+        assert(rx_result == -UDPARD_ERROR_MEMORY);
+        out = rx_result;
         break;
     }
     return out;
@@ -965,51 +965,51 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
     transmitPendingFrames(ts_before_usec, app->iface_count, &app->tx_pipeline[0]);
 
     // Fill out the TX awaitable array. May be empty if there's nothing to transmit at the moment.
-    size_t         tx_count                                  = 0;
-    UDPTxAwaitable tx_aw[UDPARD_NETWORK_INTERFACE_COUNT_MAX] = {0};
+    size_t         tx_count                                     = 0;
+    UDPTxAwaitable tx_await[UDPARD_NETWORK_INTERFACE_COUNT_MAX] = {0};
     for (size_t i = 0; i < app->iface_count; i++)
     {
         if (app->tx_pipeline[i].udpard_tx.queue_size > 0)  // There's something to transmit!
         {
-            tx_aw[tx_count].handle         = &app->tx_pipeline[i].io;
-            tx_aw[tx_count].user_reference = &app->tx_pipeline[i];
+            tx_await[tx_count].handle         = &app->tx_pipeline[i].io;
+            tx_await[tx_count].user_reference = &app->tx_pipeline[i];
             tx_count++;
         }
     }
 
     // Fill out the RX awaitable array.
-    size_t         rx_count                                       = 0;
-    UDPRxAwaitable rx_aw[UDPARD_NETWORK_INTERFACE_COUNT_MAX * 10] = {0};
+    size_t         rx_count                                          = 0;
+    UDPRxAwaitable rx_await[UDPARD_NETWORK_INTERFACE_COUNT_MAX * 10] = {0};
     for (size_t i = 0; i < app->iface_count; i++)  // Subscription sockets (one per topic per iface).
     {
-        rx_aw[rx_count].handle         = &app->sub_pnp_node_id_allocation.io[i];
-        rx_aw[rx_count].user_reference = &app->sub_pnp_node_id_allocation;
+        rx_await[rx_count].handle         = &app->sub_pnp_node_id_allocation.io[i];
+        rx_await[rx_count].user_reference = &app->sub_pnp_node_id_allocation;
         rx_count++;
         if (app->sub_data.enabled)
         {
-            rx_aw[rx_count].handle         = &app->sub_data.io[i];
-            rx_aw[rx_count].user_reference = &app->sub_data;
+            rx_await[rx_count].handle         = &app->sub_data.io[i];
+            rx_await[rx_count].user_reference = &app->sub_data;
             rx_count++;
         }
-        assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
+        assert(rx_count <= (sizeof(rx_await) / sizeof(rx_await[0])));
     }
     if (app->local_node_id <= UDPARD_NODE_ID_MAX)  // The RPC socket is not initialized until the node-ID is set.
     {
         for (size_t i = 0; i < app->iface_count; i++)  // RPC dispatcher sockets (one per iface).
         {
-            rx_aw[rx_count].handle         = &app->rpc_dispatcher.io[i];
-            rx_aw[rx_count].user_reference = NULL;
+            rx_await[rx_count].handle         = &app->rpc_dispatcher.io[i];
+            rx_await[rx_count].user_reference = NULL;
             rx_count++;
-            assert(rx_count <= (sizeof(rx_aw) / sizeof(rx_aw[0])));
+            assert(rx_count <= (sizeof(rx_await) / sizeof(rx_await[0])));
         }
     }
 
     // Block until something happens or the deadline is reached.
     const int16_t wait_result = udpWait((unblock_deadline > ts_before_usec) ? (unblock_deadline - ts_before_usec) : 0,
                                         tx_count,
-                                        &tx_aw[0],
+                                        &tx_await[0],
                                         rx_count,
-                                        &rx_aw[0]);
+                                        &rx_await[0]);
     if (wait_result < 0)
     {
         abort();  // Unreachable.
@@ -1020,7 +1020,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
     const UdpardMicrosecond ts_after_usec = getMonotonicMicroseconds();
     for (size_t i = 0; i < rx_count; i++)
     {
-        if (!rx_aw[i].ready)
+        if (!rx_await[i].ready)
         {
             continue;  // This one is not yet ready to read.
         }
@@ -1037,7 +1037,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
             continue;
         }
         // Read the data from the socket into the buffer we just allocated.
-        const int16_t rx_result = udpRxReceive(rx_aw[i].handle, &payload.size, payload.data);
+        const int16_t rx_result = udpRxReceive(rx_await[i].handle, &payload.size, payload.data);
         assert(0 != rx_result);
         if (rx_result < 0)
         {
@@ -1054,12 +1054,12 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         //    - Pass awaitables as an array of pointers -- requires an extra array.
         //    - Use a linked list -- results in a clumsy API.
         //    - Add the required field to the awaitable type -- breaks encapsulation.
-        if (rx_aw[i].user_reference != NULL)
+        if (rx_await[i].user_reference != NULL)
         {
-            struct Subscriber* const sub = (struct Subscriber*) rx_aw[i].user_reference;
+            struct Subscriber* const sub = (struct Subscriber*) rx_await[i].user_reference;
             if (sub->enabled)
             {
-                const uint8_t iface_index = (uint8_t) (rx_aw[i].handle - &sub->io[0]);
+                const uint8_t iface_index = (uint8_t) (rx_await[i].handle - &sub->io[0]);
                 const int16_t read_result = acceptDatagramForSubscription(ts_after_usec,
                                                                           payload,
                                                                           app->local_node_id,
@@ -1079,7 +1079,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         }
         else
         {
-            const uint8_t iface_index = (uint8_t) (rx_aw[i].handle - &app->rpc_dispatcher.io[0]);
+            const uint8_t iface_index = (uint8_t) (rx_await[i].handle - &app->rpc_dispatcher.io[0]);
             assert(iface_index < UDPARD_NETWORK_INTERFACE_COUNT_MAX);
             const int16_t read_result = acceptDatagramForRPC(ts_after_usec,
                                                              payload,
