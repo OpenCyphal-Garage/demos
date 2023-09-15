@@ -1047,7 +1047,14 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
             continue;
         }
         // Pass the data buffer into LibUDPard for further processing. It takes ownership of the buffer.
-        if (rx_aw[i].user_reference != NULL)  // This is used to differentiate subscription sockets from RPC sockets.
+        //
+        // We use the user_reference to differentiate subscription sockets from RPC sockets.
+        // This is a little hacky but we can't subtype it to add custom state because that breaks the array layout.
+        // All of the better solutions I could come up with are various shades of bad:
+        //    - Pass awaitables as an array of pointers -- requires an extra array.
+        //    - Use a linked list -- results in a clumsy API.
+        //    - Add the required field to the awaitable type -- breaks encapsulation.
+        if (rx_aw[i].user_reference != NULL)
         {
             struct Subscriber* const sub = (struct Subscriber*) rx_aw[i].user_reference;
             if (sub->enabled)
