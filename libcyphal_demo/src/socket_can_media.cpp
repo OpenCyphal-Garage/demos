@@ -4,6 +4,7 @@
 
 #include "socket_can_media.hpp"
 
+#include <libcyphal/transport/can/media.hpp>
 #include <socketcan.h>
 
 #include <unistd.h>

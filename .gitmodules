@@ -13,3 +13,10 @@
 [submodule "submodules/platform_specific_components"]
 	path = submodules/platform_specific_components
 	url = https://github.com/OpenCyphal-Garage/platform_specific_components
+[submodule "submodules/libcyphal"]
+	path = submodules/libcyphal
+	url = https://github.com/OpenCyphal-Garage/libcyphal
+    branch = sshirokov/226_clang_tidy
+[submodule "submodules/cetl"]
+	path = submodules/cetl
+	url = https://github.com/OpenCyphal/CETL.git

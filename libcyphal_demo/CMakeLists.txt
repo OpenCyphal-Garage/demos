@@ -88,6 +88,10 @@ include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 add_library(socketcan STATIC ${submodules}/platform_specific_components/socketcan/libcanard/src/socketcan.c)
 include_directories(SYSTEM ${submodules}/platform_specific_components/socketcan/libcanard/src)
 
+# Reference CETL & libcyphal.
+include_directories(SYSTEM ${submodules}/cetl/include)
+include_directories(SYSTEM ${submodules}/libcyphal/include)
+
 # Build the application.
 add_executable(libcyphal_demo
         src/main.cpp
