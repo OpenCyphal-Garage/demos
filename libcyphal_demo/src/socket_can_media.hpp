@@ -2,13 +2,9 @@
 /// Copyright (C) 2021 OpenCyphal <consortium@opencyphal.org>
 /// Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
-#include "socket_can_media.hpp"
+#ifndef LIBCYPHAL_DEMO_SOCKET_CAN_MEDIA_HPP
+#define LIBCYPHAL_DEMO_SOCKET_CAN_MEDIA_HPP
 
-#include <iostream>
+void xxx();
 
-int main(int, char**)
-{
-    xxx();
-    std::cout << "Hello, World!\n";
-    return 0;
-}
+#endif  // LIBCYPHAL_DEMO_SOCKET_CAN_MEDIA_HPP

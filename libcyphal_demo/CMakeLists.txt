@@ -8,6 +8,17 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
+# Set up static analysis.
+set(STATIC_ANALYSIS OFF CACHE BOOL "enable static analysis")
+if (STATIC_ANALYSIS)
+    # clang-tidy (separate config files per directory)
+    find_program(clang_tidy NAMES clang-tidy)
+    if (NOT clang_tidy)
+        message(FATAL_ERROR "Could not locate clang-tidy")
+    endif ()
+    message(STATUS "Using clang-tidy: ${clang_tidy}")
+endif ()
+
 set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_C_STANDARD 11)
@@ -73,9 +84,19 @@ include_directories(SYSTEM ${submodules}/libcanard/libcanard)
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
+# Build socketcan.
+add_library(socketcan STATIC ${submodules}/platform_specific_components/socketcan/libcanard/src/socketcan.c)
+include_directories(SYSTEM ${submodules}/platform_specific_components/socketcan/libcanard/src)
+
 # Build the application.
 add_executable(libcyphal_demo
         src/main.cpp
+        src/socket_can_media.cpp
+        src/socket_can_media.hpp
 )
 add_dependencies(libcyphal_demo dsdl_uavcan dsdl_reg)
-target_link_libraries(libcyphal_demo canard o1heap)
+target_link_libraries(libcyphal_demo canard o1heap socketcan)
+
+if (STATIC_ANALYSIS)
+    set_target_properties(libcyphal_demo PROPERTIES CXX_CLANG_TIDY "${clang_tidy}")
+endif()

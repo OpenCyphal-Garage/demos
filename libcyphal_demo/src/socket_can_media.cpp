@@ -4,11 +4,12 @@
 
 #include "socket_can_media.hpp"
 
-#include <iostream>
+#include <socketcan.h>
 
-int main(int, char**)
+#include <unistd.h>
+
+void xxx()
 {
-    xxx();
-    std::cout << "Hello, World!\n";
-    return 0;
+    auto socket_can_fd = ::socketcanOpen("vcan0", false);
+    ::close(socket_can_fd);
 }
