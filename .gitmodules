@@ -1,6 +1,7 @@
 [submodule "submodules/libcanard"]
 	path = submodules/libcanard
 	url = https://github.com/UAVCAN/libcanard
+	branch = sshirokov/222-getsubsription
 [submodule "submodules/public_regulated_data_types"]
 	path = submodules/public_regulated_data_types
 	url = https://github.com/UAVCAN/public_regulated_data_types

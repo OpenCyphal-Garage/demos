@@ -95,8 +95,10 @@ include_directories(SYSTEM ${submodules}/libcyphal/include)
 # Build the application.
 add_executable(libcyphal_demo
         src/main.cpp
-        src/socket_can_media.cpp
-        src/socket_can_media.hpp
+        src/can/socket_can_media.cpp
+        src/can/socket_can_media.hpp
+        src/multiplexer.hpp
+        src/monotonic_clock.cpp
 )
 add_dependencies(libcyphal_demo dsdl_uavcan dsdl_reg)
 target_link_libraries(libcyphal_demo canard o1heap socketcan)
