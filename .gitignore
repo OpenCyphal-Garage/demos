@@ -47,3 +47,7 @@ cmake-build*/
 **/.idea/*
 !**/.idea/dictionaries
 !**/.idea/dictionaries/*
+
+# OS stuff
+.DS_Store
+*.bak
