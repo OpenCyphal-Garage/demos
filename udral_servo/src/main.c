@@ -117,7 +117,7 @@ static volatile bool g_restart_required = false;
 /// Mind the difference between monotonic time and wall time. Monotonic time never changes rate or makes leaps,
 /// it is therefore impossible to synchronize with an external reference. Wall time can be synchronized and therefore
 /// it may change rate or make leap adjustments. The two kinds of time serve completely different purposes.
-static CanardMicrosecond getMonotonicMicroseconds()
+static CanardMicrosecond getMonotonicMicroseconds(void)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
@@ -658,7 +658,7 @@ static uavcan_register_Access_Response_1_0 processRequestRegisterAccess(const ua
 }
 
 /// Constructs a response to uavcan.node.GetInfo which contains the basic information about this node.
-static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
+static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo(void)
 {
     uavcan_node_GetInfo_Response_1_0 resp = {0};
     resp.protocol_version.major           = CANARD_CYPHAL_SPECIFICATION_VERSION_MAJOR;

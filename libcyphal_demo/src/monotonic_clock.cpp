@@ -9,5 +9,5 @@
 libcyphal::TimePoint libcyphal::MonotonicClock::now() noexcept
 {
     const auto now = std::chrono::steady_clock::now();
-    return {now.time_since_epoch()};
+    return libcyphal::TimePoint{std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch())};
 }

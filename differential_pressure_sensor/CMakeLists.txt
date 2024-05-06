@@ -71,11 +71,14 @@ include_directories(SYSTEM ${submodules}/libcanard/libcanard)
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
+# Build socketcan.
+add_library(socketcan STATIC ${submodules}/platform_specific_components/socketcan/libcanard/src/socketcan.c)
+include_directories(SYSTEM ${submodules}/platform_specific_components/socketcan/libcanard/src)
+
 # Build the application.
 add_executable(differential_pressure_sensor
         src/main.c
         src/register.c
-        src/socketcan.c
 )
 add_dependencies(differential_pressure_sensor dsdl_uavcan dsdl_reg)
-target_link_libraries(differential_pressure_sensor canard o1heap)
+target_link_libraries(differential_pressure_sensor canard o1heap socketcan)

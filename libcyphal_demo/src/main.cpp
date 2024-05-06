@@ -47,8 +47,8 @@ int main(int, char**)
     auto heartbeat_session =
         std::move(*cetl::get_if<libcyphal::UniquePtr<libcyphal::transport::IMessageTxSession>>(&maybe_heartbeat_session));
 
-    transport->run(libcyphal::TimePoint{});
-    heartbeat_session->run(libcyphal::TimePoint{});
+    transport->run(libcyphal::MonotonicClock::now());
+    heartbeat_session->run(libcyphal::MonotonicClock::now());
 
     std::cout << "Hello, World!\n";
     return 0;
