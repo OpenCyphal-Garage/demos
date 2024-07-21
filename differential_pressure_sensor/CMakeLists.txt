@@ -29,6 +29,13 @@ add_definitions(
         -DNODE_NAME="org.opencyphal.demos.differential_pressure"
 )
 
+option(CAN_CLASSIC "Build for can classic" ON) # Enabled by default
+
+if(CAN_CLASSIC)
+        add_definitions(-DCAN_CLASSIC)
+endif(CAN_CLASSIC)
+
+
 # Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
 # Alternatively, you can invoke the transpiler manually or use https://nunaweb.opencyphal.org.
 find_package(nnvg REQUIRED)

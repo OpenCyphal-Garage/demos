@@ -24,8 +24,11 @@
 #include <uavcan/node/port/List_0_1.h>
 #include <uavcan/_register/Access_1_0.h>
 #include <uavcan/_register/List_1_0.h>
+#ifdef CAN_CLASSIC
+#include <uavcan/pnp/NodeIDAllocationData_1_0.h>
+#else 
 #include <uavcan/pnp/NodeIDAllocationData_2_0.h>
-
+#endif /* CAN_CLASSIC */
 // Use /sample/ instead of /unit/ if you need timestamping.
 #include <uavcan/si/unit/pressure/Scalar_1_0.h>
 #include <uavcan/si/unit/temperature/Scalar_1_0.h>
@@ -42,6 +45,43 @@
 #define CAN_REDUNDANCY_FACTOR 1
 /// For CAN FD the queue can be smaller.
 #define CAN_TX_QUEUE_CAPACITY 100
+
+#ifdef CAN_CLASSIC
+#define CRC64WE_POLY 0x92F0E1EAABEA3693
+#define CRC64WE_INIT 0xFFFFFFFFFFFFFFFF
+#define CRC64WE_XOROUT 0xFFFFFFFFFFFFFFFF
+
+static uint64_t crc64we_table[256];
+
+static void init_crc64we_table()
+{
+    for (uint64_t i = 0; i < 256; i++)
+    {
+        uint64_t crc = i;
+        for (uint64_t j = 0; j < 8; j++)
+        {
+            if (crc & 1)
+                crc = (crc >> 1) ^ CRC64WE_POLY;
+            else
+                crc = crc >> 1;
+        }
+        crc64we_table[i] = crc;
+    }
+}
+
+static uint64_t crc64we(const uint8_t* data, size_t length)
+{
+    uint64_t crc = CRC64WE_INIT;
+
+    for (size_t i = 0; i < length; i++)
+    {
+        uint8_t byte = data[i];
+        crc          = crc64we_table[(crc ^ byte) & 0xFF] ^ (crc >> 8);
+    }
+
+    return crc ^ CRC64WE_XOROUT;
+}
+#endif /* CAN_CLASSIC */ 
 
 /// We keep the state of the application here. Feel free to use static variables instead if desired.
 typedef struct State
@@ -255,20 +295,35 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         // Note that a high-integrity/safety-certified application is unlikely to be able to rely on this feature.
         if (rand() > RAND_MAX / 2)  // NOLINT
         {
-            // Note that this will only work over CAN FD. If you need to run PnP over Classic CAN, use message v1.0.
+#ifdef CAN_CLASSIC
+            uavcan_pnp_NodeIDAllocationData_1_0 msg = {0};
+            uint8_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_] = {0};
+            getUniqueID(uid);
+            init_crc64we_table();
+            uint64_t uid_hash = crc64we(uid, sizeof uid);
+            memcpy(&msg.unique_id_hash, &uid_hash, 5);
+            uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+            size_t       serialized_size = sizeof(serialized);
+            const int8_t err = uavcan_pnp_NodeIDAllocationData_1_0_serialize_(&msg, &serialized[0], &serialized_size);
+#else
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
             msg.node_id.value                       = UINT16_MAX;
             getUniqueID(msg.unique_id);
             uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_2_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
             size_t       serialized_size = sizeof(serialized);
-            const int8_t err = uavcan_pnp_NodeIDAllocationData_2_0_serialize_(&msg, &serialized[0], &serialized_size);
+            const int8_t err = uavcan_pnp_NodeIDAllocationData_2_0_serialize_(&msg, &serialized[0], &serialized_size);            
+#endif /* CAN_CLASSIC */
             assert(err >= 0);
             if (err >= 0)
             {
                 const CanardTransferMetadata meta = {
                     .priority       = CanardPrioritySlow,
                     .transfer_kind  = CanardTransferKindMessage,
+#ifdef CAN_CLASSIC
+                    .port_id        = uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_,
+#else
                     .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
+#endif
                     .remote_node_id = CANARD_NODE_ID_UNSET,
                     .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_pnp_allocation++),
                 };
@@ -381,7 +436,33 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         }
     }
 }
-
+#ifdef CAN_CLASSIC
+static void processMessagePlugAndPlayNodeIDAllocation(State* const                                     state,
+                                                      const uavcan_pnp_NodeIDAllocationData_1_0* const msg)
+{
+    uint8_t uid[uavcan_node_GetInfo_Response_1_0_unique_id_ARRAY_CAPACITY_] = {0};
+    getUniqueID(uid);
+    init_crc64we_table();
+    uint64_t uid_hash = crc64we(uid, sizeof uid);
+    if (msg->allocated_node_id.count > 0 && (msg->allocated_node_id.elements[0].value <= CANARD_NODE_ID_MAX) &&
+        (memcmp(&uid_hash, &msg->unique_id_hash, 5 /*sizeof(uid)*/) == 0))
+    {
+        printf("Got PnP node-ID allocation: %d\n", msg->allocated_node_id.elements[0].value);
+        state->canard.node_id = (CanardNodeID) msg->allocated_node_id.elements[0].value;
+        // Store the value into the non-volatile storage.
+        uavcan_register_Value_1_0 reg = {0};
+        uavcan_register_Value_1_0_select_natural16_(&reg);
+        reg.natural16.value.elements[0] = msg->allocated_node_id.elements[0].value;
+        reg.natural16.value.count       = 1;
+        registerWrite("uavcan.node.id", &reg);
+        // We no longer need the subscriber, drop it to free up the resources (both memory and CPU time).
+        (void) canardRxUnsubscribe(&state->canard,
+                                   CanardTransferKindMessage,
+                                   uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_);
+    }
+    // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
+}
+#else
 static void processMessagePlugAndPlayNodeIDAllocation(State* const                                     state,
                                                       const uavcan_pnp_NodeIDAllocationData_2_0* const msg)
 {
@@ -404,6 +485,7 @@ static void processMessagePlugAndPlayNodeIDAllocation(State* const              
     }
     // Otherwise, ignore it: either it is a request from another node or it is a response to another node.
 }
+#endif /* CAN_CLASSIC */
 
 static uavcan_node_ExecuteCommand_Response_1_1 processRequestExecuteCommand(
     const uavcan_node_ExecuteCommand_Request_1_1* req)
@@ -525,10 +607,17 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
     if (transfer->metadata.transfer_kind == CanardTransferKindMessage)
     {
         size_t size = transfer->payload_size;
+#ifdef CAN_CLASSIC
+        if (transfer->metadata.port_id == uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_)
+        {
+            uavcan_pnp_NodeIDAllocationData_1_0 msg = {0};
+            if (uavcan_pnp_NodeIDAllocationData_1_0_deserialize_(&msg, transfer->payload, &size) >= 0)
+#else
         if (transfer->metadata.port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
         {
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
             if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload, &size) >= 0)
+#endif /* CAN_CLASSIC */
             {
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
@@ -698,18 +787,24 @@ int main(const int argc, char* const argv[])
     // Configure the transport by reading the appropriate standard registers.
     uavcan_register_Value_1_0_select_natural16_(&val);
     val.natural16.value.count       = 1;
+#ifdef CAN_CLASSIC
+    val.natural16.value.elements[0] = CANARD_MTU_CAN_CLASSIC;
+#else
     val.natural16.value.elements[0] = CANARD_MTU_CAN_FD;
+#endif
     registerRead("uavcan.can.mtu", &val);
     assert(uavcan_register_Value_1_0_is_natural16_(&val) && (val.natural16.value.count == 1));
     // We also need the bitrate configuration register. In this demo we can't really use it but an embedded application
     // should define "uavcan.can.bitrate" of type natural32[2]; the second value is 0/ignored if CAN FD not supported.
+    const char iface_name[] = "vcan0";
     const int sock[CAN_REDUNDANCY_FACTOR] = {
-        socketcanOpen("vcan0", val.natural16.value.elements[0] > CANARD_MTU_CAN_CLASSIC)  //
+        socketcanOpen(iface_name, val.natural16.value.elements[0] > CANARD_MTU_CAN_CLASSIC)  //
     };
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
         if (sock[ifidx] < 0)
         {
+            printf("Unable to open can interface '%s'", iface_name);
             return -sock[ifidx];
         }
         state.canard_tx_queues[ifidx] = canardTxInit(CAN_TX_QUEUE_CAPACITY, val.natural16.value.elements[0]);
@@ -734,8 +829,13 @@ int main(const int argc, char* const argv[])
         const int8_t                res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
+#ifdef CAN_CLASSIC
+                              uavcan_pnp_NodeIDAllocationData_1_0_FIXED_PORT_ID_,
+                              uavcan_pnp_NodeIDAllocationData_1_0_EXTENT_BYTES_,
+#else
                               uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
                               uavcan_pnp_NodeIDAllocationData_2_0_EXTENT_BYTES_,
+#endif
                               CANARD_DEFAULT_TRANSFER_ID_TIMEOUT_USEC,
                               &rx);
         if (res < 0)
