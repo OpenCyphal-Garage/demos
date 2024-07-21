@@ -14,7 +14,8 @@ This demo supports only Cyphal/CAN at the moment, but it can be extended to supp
 You will need GNU/Linux, CMake, a C11 compiler, [Yakut](https://github.com/OpenCyphal/yakut),
 and [SocketCAN utils](https://github.com/linux-can/can-utils).
 
-Build the demo as follows:
+Build the demo as follows 
+(the default builds for can-fd, you can pass `-DCAN_CLASSIC=y` to cmake to build for can classic):
 
 ```bash
 git clone --recursive https://github.com/OpenCyphal/demos
