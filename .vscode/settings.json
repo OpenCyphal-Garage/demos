@@ -4,8 +4,5 @@
         "Cyphal",
         "POSIX"
     ],
-    "cmake.sourceDirectory": "/home/sergei/Develop/git/OpenCyphal-Garage/demos/libcyphal_demo",
-    "files.associations": {
-        "stdlib.h": "c"
-    }
+    "cmake.sourceDirectory": "/home/sergei/Develop/git/OpenCyphal-Garage/demos/libcyphal_demo"
 }

@@ -28,7 +28,7 @@ jobs:
           pip install git+https://github.com/OpenCyphal/nunavut.git@23b84f76d4fc0e75595efc02fde30140e3cef2fb
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DSTATIC_ANALYSIS=ON -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
+        run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
 
       - name: Build
         run: cmake --build ${{github.workspace}}/libcyphal_demo/build --config ${{matrix.build_type}}
@@ -47,7 +47,7 @@ jobs:
           pip install nunavut
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/libudpard_demo/build -DSTATIC_ANALYSIS=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
+        run: cmake -B ${{github.workspace}}/libudpard_demo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
 
       - name: Build
         run: cmake --build ${{github.workspace}}/libudpard_demo/build --config ${{env.BUILD_TYPE}}
