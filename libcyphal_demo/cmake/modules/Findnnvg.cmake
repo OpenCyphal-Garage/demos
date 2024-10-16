@@ -87,6 +87,8 @@ function(create_dsdl_target ARG_TARGET_NAME
                 " (${NNVG})")
     endif ()
 
+    message(STATUS "ZZZ: ${INPUT_FILES}")
+
     add_custom_command(OUTPUT ${OUTPUT_FILES}
             COMMAND ${NNVG} ${NNVG_CMD_ARGS}
             DEPENDS ${INPUT_FILES}
