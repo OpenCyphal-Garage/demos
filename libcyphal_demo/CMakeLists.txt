@@ -2,11 +2,16 @@
 # Copyright (C) OpenCyphal Development Team  <opencyphal.org>
 # Copyright Amazon.com Inc. or its affiliates.
 # SPDX-License-Identifier: MIT
-# Author: Pavel Kirienko <pavel@opencyphal.org>
+# Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
 cmake_minimum_required(VERSION 3.20)
 
-project(libudpard_demo C)
+project(libcyphal_demo
+        LANGUAGES CXX C
+        HOMEPAGE_URL https://github.com/OpenCyphal-Garage/libcyphal)
+
+set(CMAKE_CXX_STANDARD "14" CACHE STRING "C++ standard to use when compiling.")
+
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
 
@@ -33,15 +38,15 @@ add_definitions(
         -DVERSION_MAJOR=1
         -DVERSION_MINOR=0
         -DVCS_REVISION_ID=0x${vcs_revision_id}ULL
-        -DNODE_NAME="org.opencyphal.demos.libudpard"
+        -DNODE_NAME="org.opencyphal.demos.libcyphal"
 )
 
-# Transpile DSDL into C using Nunavut. Install Nunavut as follows: pip install nunavut.
+# Transpile DSDL into C++ using Nunavut. Install Nunavut as follows: pip install nunavut.
 # Alternatively, you can invoke the transpiler manually or use https://nunaweb.opencyphal.org.
 find_package(nnvg REQUIRED)
-create_dsdl_target(             # Generate the support library for generated C headers, which is "nunavut.h".
+create_dsdl_target(             # Generate the support library for generated C++ headers, which is "nunavut.h".
         "nunavut_support"
-        c
+        cpp
         ${CMAKE_BINARY_DIR}/transpiled
         ""
         OFF
@@ -50,14 +55,13 @@ create_dsdl_target(             # Generate the support library for generated C h
 )
 set(dsdl_root_namespace_dirs                # List all DSDL root namespaces to transpile here.
         ${submodules}/public_regulated_data_types/uavcan
-        ${submodules}/public_regulated_data_types/reg
 )
 foreach (ns_dir ${dsdl_root_namespace_dirs})
     get_filename_component(ns ${ns_dir} NAME)
     message(STATUS "DSDL namespace ${ns} at ${ns_dir}")
     create_dsdl_target(
             "dsdl_${ns}"                    # CMake target name
-            c                               # Target language to transpile into
+            cpp                             # Target language to transpile into
             ${CMAKE_BINARY_DIR}/transpiled  # Destination directory (add it to the includes)
             ${ns_dir}                       # Source directory
             OFF                             # Disable variable array capacity override
@@ -70,29 +74,16 @@ endforeach ()
 include_directories(SYSTEM ${CMAKE_BINARY_DIR}/transpiled)  # Make the transpiled headers available for inclusion.
 add_definitions(-DNUNAVUT_ASSERT=assert)
 
-# Define the LibUDPard static library build target. No special options are needed to use the library, it's very simple.
-add_library(udpard_demo STATIC ${submodules}/libudpard/libudpard/udpard.c)
-target_include_directories(udpard_demo INTERFACE SYSTEM ${submodules}/libudpard/libudpard)
+# Define the LibUDPard static library build target.
+add_library(udpard STATIC ${submodules}/libudpard/libudpard/udpard.c)
+target_include_directories(udpard INTERFACE SYSTEM ${submodules}/libudpard/libudpard)
 
-# Define the demo application build target and link it with the library.
-add_executable(
-        demo
-        ${CMAKE_SOURCE_DIR}/src/main.c
-        ${CMAKE_SOURCE_DIR}/src/storage.c
-        ${CMAKE_SOURCE_DIR}/src/register.c
-        ${CMAKE_SOURCE_DIR}/src/udp.c
-)
-target_include_directories(demo PRIVATE ${submodules}/cavl)
-target_link_libraries(demo PRIVATE udpard_demo)
-add_dependencies(demo dsdl_uavcan dsdl_reg)
-set_target_properties(
-        demo
-        PROPERTIES
-        COMPILE_FLAGS "-Wall -Wextra -Werror -pedantic -Wdouble-promotion -Wswitch-enum -Wfloat-equal \
-            -Wundef -Wconversion -Wtype-limits -Wsign-conversion -Wcast-align -Wmissing-declarations"
-        C_STANDARD 11
-        C_EXTENSIONS OFF
-)
-if (STATIC_ANALYSIS)
-    set_target_properties(demo PROPERTIES C_CLANG_TIDY "${clang_tidy}")
-endif ()
+# Define the LibCANard static library build target.
+add_library(canard STATIC ${submodules}/libcanard/libcanard/canard.c)
+target_include_directories(canard INTERFACE SYSTEM ${submodules}/libcanard/libcanard)
+
+# Build o1heap -- a hard real-time deterministic memory allocator for embedded systems.
+add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
+target_include_directories(o1heap INTERFACE SYSTEM ${submodules}/o1heap/o1heap)
+
+add_subdirectory(src)

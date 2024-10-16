@@ -68,6 +68,7 @@ void registerInit(struct Register* const  self,
     cavlRemove((Cavl**) root, cavlSearch((Cavl**) root, self, &treeSearchReg, NULL));
     const Cavl* const res = cavlSearch((Cavl**) root, self, &treeSearchReg, &treeFactory);
     assert(res == &self->base);
+    (void) res;
 }
 
 bool registerAssign(uavcan_register_Value_1_0* const dst, const uavcan_register_Value_1_0* const src)

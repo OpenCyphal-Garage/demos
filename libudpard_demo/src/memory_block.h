@@ -100,6 +100,7 @@ static void memoryBlockDeallocate(void* const user_reference, const size_t size,
 {
     struct MemoryBlockAllocator* const self = (struct MemoryBlockAllocator*) user_reference;
     assert((self != NULL) && (size <= self->block_size_bytes));
+    (void) size;
     if (pointer != NULL)
     {
         *(void**) pointer = self->head;

@@ -1,0 +1,94 @@
+name: build
+
+on:
+  push:
+    branches: [ "sshirokov/libcyphal" ]
+  pull_request:
+    branches: [ "sshirokov/libcyphal" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build_libcyphal_demo:
+    name: Build LibCyphal demo
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: get nunavut
+        run: >
+          pip install git+https://github.com/OpenCyphal/nunavut.git@23b84f76d4fc0e75595efc02fde30140e3cef2fb
+
+      - name: Configure CMake
+        run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/libcyphal_demo/build --config ${{matrix.build_type}}
+
+  build_libudpard_demo:
+    name: Build LibUDPard demo
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: get nunavut
+        run: >
+          pip install nunavut
+
+      - name: Configure CMake
+        run: cmake -B ${{github.workspace}}/libudpard_demo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/libudpard_demo/build --config ${{env.BUILD_TYPE}}
+
+  build_differential_pressure_sensor:
+    if: false
+    name: Build Differential Pressure Sensor demo
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: get nunavut
+        run: >
+          pip install nunavut
+
+      - name: Configure CMake
+        run: cmake -B ${{github.workspace}}/differential_pressure_sensor/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/differential_pressure_sensor
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/differential_pressure_sensor/build --config ${{env.BUILD_TYPE}}
+
+
+  build_udral_servo:
+    if: false
+    name: Build UDRAL Servo demo
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: get nunavut
+        run: >
+          pip install nunavut
+
+      - name: Configure CMake
+        run: cmake -B ${{github.workspace}}/udral_servo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/udral_servo
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/udral_servo/build --config ${{env.BUILD_TYPE}}
