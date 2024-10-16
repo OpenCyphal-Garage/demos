@@ -31,6 +31,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/libcyphal_demo/build --config ${{env.BUILD_TYPE}}
 
   build_libudpard_demo:
+    name: Build LibUDPard demo
     runs-on: ubuntu-latest
 
     steps:
