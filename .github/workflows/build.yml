@@ -12,7 +12,6 @@ env:
 
 jobs:
   build_libcyphal_demo:
-    enable: false
     name: Build LibCyphal demo
     runs-on: ubuntu-latest
     strategy:
