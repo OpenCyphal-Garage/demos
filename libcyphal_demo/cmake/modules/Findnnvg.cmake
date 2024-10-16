@@ -63,13 +63,9 @@ function(create_dsdl_target ARG_TARGET_NAME
         message(STATUS "Enabling variable array capacity override option in generated code.")
     endif ()
 
-    message(STATUS "XXX: ${NNVG_CMD_ARGS}")
-
     execute_process(COMMAND ${NNVG} --list-outputs ${NNVG_CMD_ARGS}
             OUTPUT_VARIABLE OUTPUT_FILES
             RESULT_VARIABLE LIST_OUTPUTS_RESULT)
-
-    message(STATUS "YYY: ${OUTPUT_FILES}")
 
     if (NOT LIST_OUTPUTS_RESULT EQUAL 0)
         message(FATAL_ERROR "Failed to retrieve a list of headers nnvg would "
@@ -86,8 +82,6 @@ function(create_dsdl_target ARG_TARGET_NAME
                 "target (${LIST_INPUTS_RESULT})"
                 " (${NNVG})")
     endif ()
-
-    message(STATUS "ZZZ: ${INPUT_FILES}")
 
     add_custom_command(OUTPUT ${OUTPUT_FILES}
             COMMAND ${NNVG} ${NNVG_CMD_ARGS}
