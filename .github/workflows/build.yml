@@ -12,6 +12,7 @@ env:
 
 jobs:
   build_libcyphal_demo:
+    enable: false
     name: Build LibCyphal demo
     runs-on: ubuntu-latest
     strategy:
@@ -53,6 +54,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/libudpard_demo/build --config ${{env.BUILD_TYPE}}
 
   build_differential_pressure_sensor:
+    if: false
     name: Build Differential Pressure Sensor demo
     runs-on: ubuntu-latest
 
@@ -73,6 +75,7 @@ jobs:
 
 
   build_udral_servo:
+    if: false
     name: Build UDRAL Servo demo
     runs-on: ubuntu-latest
 
