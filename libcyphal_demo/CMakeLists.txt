@@ -10,7 +10,7 @@ project(libcyphal_demo
         LANGUAGES CXX C
         HOMEPAGE_URL https://github.com/OpenCyphal-Garage/libcyphal)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD "14" CACHE STRING "C++ standard to use when compiling.")
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
@@ -55,7 +55,6 @@ create_dsdl_target(             # Generate the support library for generated C++
 )
 set(dsdl_root_namespace_dirs                # List all DSDL root namespaces to transpile here.
         ${submodules}/public_regulated_data_types/uavcan
-        ${submodules}/public_regulated_data_types/reg
 )
 foreach (ns_dir ${dsdl_root_namespace_dirs})
     get_filename_component(ns ${ns_dir} NAME)
@@ -91,11 +90,14 @@ target_include_directories(o1heap INTERFACE SYSTEM ${submodules}/o1heap/o1heap)
 add_executable(
         demo
         ${CMAKE_SOURCE_DIR}/src/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/no_cpp_heap.cpp
 )
 target_link_libraries(demo PRIVATE udpard)
 target_link_libraries(demo PRIVATE canard)
 target_link_libraries(demo PRIVATE o1heap)
-add_dependencies(demo dsdl_uavcan dsdl_reg)
+target_include_directories(demo PRIVATE ${submodules}/cetl/include)
+target_include_directories(demo PRIVATE ${submodules}/libcyphal/include)
+add_dependencies(demo dsdl_uavcan)
 
 if (STATIC_ANALYSIS)
     set_target_properties(demo PROPERTIES C_CLANG_TIDY "${clang_tidy}")
