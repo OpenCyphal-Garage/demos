@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 
 namespace platform
@@ -30,6 +29,11 @@ public:
         : o1_heap_{o1heapInit(heap_arena.data(), heap_arena.size())}
     {
         CETL_DEBUG_ASSERT(o1_heap_ != nullptr, "");
+    }
+
+    O1HeapDiagnostics queryDiagnostics() const noexcept
+    {
+        return o1heapGetDiagnostics(o1_heap_);
     }
 
 private:

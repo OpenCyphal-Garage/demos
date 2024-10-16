@@ -33,5 +33,4 @@ CheckOptions:
   - key:   readability-magic-numbers.IgnoredIntegerValues
     value: '1;2;3;4;5;8;10;16;20;32;60;64;100;128;256;500;512;1000'
 WarningsAsErrors: '*'
-HeaderFilterRegex: 'include/libcyphal/.*\.hpp'
 FormatStyle: file

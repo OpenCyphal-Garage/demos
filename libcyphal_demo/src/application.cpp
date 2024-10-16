@@ -11,7 +11,7 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
+#include <iostream>
 
 namespace
 {
@@ -22,6 +22,17 @@ alignas(O1HEAP_ALIGNMENT) std::array<cetl::byte, HeapSize> s_heap_arena{};
 }  // namespace
 
 Application::Application()
-    : memory_{s_heap_arena}
+    : o1_heap_mr_{s_heap_arena}
 {
+}
+
+Application::~Application()
+{
+    const auto mr_diag = o1_heap_mr_.queryDiagnostics();
+    std::cout << "O(1) Heap diagnostics:" << "\n"
+              << "  tcapacity=" << mr_diag.capacity << "\n"
+              << "  tallocated=" << mr_diag.allocated << "\n"
+              << "  tpeak_allocated=" << mr_diag.peak_allocated << "\n"
+              << "  tpeak_request_size=" << mr_diag.peak_request_size << "\n"
+              << "  toom_count=" << mr_diag.oom_count << "\n";
 }
