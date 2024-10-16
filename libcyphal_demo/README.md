@@ -1,7 +1,7 @@
 # LibCyphal demo application
 
 This demo application is a usage demonstrator for [LibCyphal](https://github.com/OpenCyphal-Garage/libcyphal) ---
-a compact Cyphal UDP and CAN implementation for high-integrity systems written in C++14 and above.
+a compact multi-transport Cyphal implementation for high-integrity systems written in C++14 and above.
 It implements a simple Cyphal node that showcases the following features:
 
 - Fixed port-ID and non-fixed port-ID publishers.
