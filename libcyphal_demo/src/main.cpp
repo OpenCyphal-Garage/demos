@@ -4,12 +4,16 @@
 // SPDX-License-Identifier: MIT
 // Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
+#include "application.hpp"
+
 #include <libcyphal/application/node.hpp>
 
 #include <iostream>
 
 int main()
 {
+    const Application application;
+
     const std::string str{"LibCyphal demo."};
     std::cout << str << "\n";
     return 0;
