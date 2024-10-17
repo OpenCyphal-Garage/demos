@@ -2,9 +2,13 @@ name: build
 
 on:
   push:
-    branches: [ "sshirokov/libcyphal" ]
+    branches:
+      - main
+      - 'issue/*'
   pull_request:
-    branches: [ "sshirokov/libcyphal" ]
+    branches:
+      - main
+      - 'issue/*'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
