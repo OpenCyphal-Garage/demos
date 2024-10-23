@@ -16,7 +16,7 @@
 // Disable std c++ heap allocations.
 // In this demo we gonna use only stack and PMR allocations.
 //
-extern void* operator new(std::size_t) noexcept
+extern void* operator new(std::size_t)
 {
     std::cerr << "operator `new(size_t)` has been called";
     std::exit(1);
