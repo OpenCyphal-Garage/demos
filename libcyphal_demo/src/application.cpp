@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdlib>
 #include <iostream>
 
 namespace
@@ -23,7 +24,18 @@ alignas(O1HEAP_ALIGNMENT) std::array<cetl::byte, HeapSize> s_heap_arena{};
 
 Application::Application()
     : o1_heap_mr_{s_heap_arena}
+    , registry_{o1_heap_mr_}
+    , regs_{registry_}
 {
+    auto iface_params = getIfaceParams();
+    if (const auto* const iface_addresses_str = std::getenv("CYPHAL__UDP__IFACE"))
+    {
+        iface_params.udp_iface.value() = iface_addresses_str;
+    }
+    if (const auto* const iface_addresses_str = std::getenv("CYPHAL__CAN__IFACE"))
+    {
+        iface_params.can_iface.value() = iface_addresses_str;
+    }
 }
 
 Application::~Application()
