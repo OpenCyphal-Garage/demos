@@ -10,6 +10,7 @@
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/application/node.hpp>
+#include <libcyphal/application/registry/registry.hpp>
 #include <libcyphal/executor.hpp>
 #include <libcyphal/transport/can/can_transport_impl.hpp>
 #include <libcyphal/transport/udp/udp_transport_impl.hpp>
@@ -23,6 +24,29 @@ using namespace std::chrono_literals;
 
 using Callback = libcyphal::IExecutor::Callback;
 
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
+
+namespace
+{
+
+/// Helper function to create a register string value.
+///
+libcyphal::application::registry::IRegister::Value makeStringValue(cetl::pmr::memory_resource& memory,
+                                                                   const cetl::string_view     sv)
+{
+    using Value = libcyphal::application::registry::IRegister::Value;
+
+    const Value::allocator_type alloc{&memory};
+    Value                       value{alloc};
+
+    auto& str = value.set_string();
+    std::copy(sv.begin(), sv.end(), std::back_inserter(str.value));
+
+    return value;
+}
+
+}  // namespace
+
 int main()
 {
     std::cout << "LibCyphal demo.\n";
@@ -30,6 +54,7 @@ int main()
     constexpr std::size_t TxQueueCapacity = 16;
 
     Application application;
+    auto&       memory   = application.memory();
     auto&       executor = application.executor();
 
     auto iface_params = application.getIfaceParams();
@@ -37,15 +62,11 @@ int main()
     // 1. Create the transport layer object.
     //
     libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport> upd_transport;
-    platform::posix::UdpMediaCollection                            udp_media_collection{application.memory(), executor};
+    platform::posix::UdpMediaCollection                            udp_media_collection{memory, executor};
     if (!iface_params.udp_iface.value().empty())
     {
         udp_media_collection.parse(iface_params.udp_iface.value());
-        auto maybe_udp_transport = makeTransport(  //
-            {application.memory()},
-            executor,
-            udp_media_collection.span(),
-            TxQueueCapacity);
+        auto maybe_udp_transport = makeTransport({memory}, executor, udp_media_collection.span(), TxQueueCapacity);
         if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_udp_transport))
         {
             std::cerr << "Failed to create UDP transport (iface='"
@@ -61,7 +82,7 @@ int main()
 
     // 2. Create the presentation layer object.
     //
-    libcyphal::presentation::Presentation presentation{application.memory(), executor, *upd_transport};
+    libcyphal::presentation::Presentation presentation{memory, executor, *upd_transport};
 
     // 3. Create the node object with name.
     //
@@ -73,6 +94,30 @@ int main()
         return 10;
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
+
+    // 4. Bring up registry provider, and expose several registers.
+    //
+    if (const auto failure = node.makeRegistryProvider(application.registry()))
+    {
+        std::cerr << "Failed to create registry provider.\n";
+        return 11;
+    }
+    // Expose GetInfo::name as mutable node description.
+    auto& get_info      = node.getInfoProvider().response();
+    auto  reg_node_desc = application.registry().route(  //
+        "uavcan.node.description",
+        [&memory, &get_info] {
+            //
+            return makeStringValue(memory, libcyphal::application::registry::makeStringView(get_info.name));
+        },
+        [&get_info](const auto& value) {
+            //
+            if (const auto* const str = value.get_string_if())
+            {
+                get_info.name = str->value;
+            }
+            return cetl::nullopt;
+        });
 
     // Main loop.
     //
@@ -98,3 +143,5 @@ int main()
 
     return 0;
 }
+
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
