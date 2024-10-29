@@ -7,8 +7,8 @@
 #ifndef PLATFORM_LINUX_EPOLL_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
 #define PLATFORM_LINUX_EPOLL_SINGLE_THREADED_EXECUTOR_HPP_INCLUDED
 
-#include "../posix/posix_executor_extension.hpp"
-#include "../posix/posix_platform_error.hpp"
+#include "platform/posix/posix_executor_extension.hpp"
+#include "platform/posix/posix_platform_error.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/rtti.hpp>

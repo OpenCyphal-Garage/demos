@@ -1,5 +1,7 @@
-/// This software is distributed under the terms of the MIT License.
-/// Copyright (c) 2020 OpenCyphal
+// This software is distributed under the terms of the MIT License.
+// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+// Copyright Amazon.com Inc. or its affiliates.
+// SPDX-License-Identifier: MIT
 /// Authors: Pavel Kirienko <pavel.kirienko@zubax.com>, Tom De Rybel <tom.derybel@robocow.be>
 
 // This is needed to enable the necessary declarations in sys/

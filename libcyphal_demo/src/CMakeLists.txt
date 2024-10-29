@@ -6,6 +6,8 @@
 
 cmake_minimum_required(VERSION 3.20)
 
+add_subdirectory(platform)
+
 # Define the demo application build target and link it with the library.
 add_executable(
         demo
@@ -16,6 +18,8 @@ add_executable(
 target_link_libraries(demo PRIVATE canard)
 target_link_libraries(demo PRIVATE o1heap)
 target_link_libraries(demo PRIVATE udpard)
+target_link_libraries(demo PRIVATE platform)
+target_include_directories(demo PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(demo PRIVATE ${submodules}/cetl/include)
 target_include_directories(demo PRIVATE ${submodules}/libcyphal/include)
 add_dependencies(demo dsdl_uavcan)

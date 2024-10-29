@@ -50,6 +50,15 @@ private:
 #endif
         }
 
+        // О1Heap is a C-library, and it follows `malloc` convention of returning nullptr on requesting zero bytes.
+        // In contrast, C++ standard (basic.stc.dynamic.allocation) requires that a memory allocation never returns
+        // nullptr (even for the zero).
+        // So, we have to handle this case explicitly by returning a non-null pointer to an empty storage.
+        if (size_bytes == 0)
+        {
+            return empty_storage_.data();
+        }
+
         return o1heapAllocate(o1_heap_, size_bytes);
     }
 
@@ -58,6 +67,13 @@ private:
         CETL_DEBUG_ASSERT((nullptr != ptr) || (0 == size_bytes), "");
         (void) size_bytes;
         (void) alignment;
+
+        // See `do_allocate` special case for zero bytes.
+        if (ptr == empty_storage_.data())
+        {
+            CETL_DEBUG_ASSERT(0 == size_bytes, "");
+            return;
+        }
 
         o1heapFree(o1_heap_, ptr);
     }
@@ -72,10 +88,26 @@ private:
         CETL_DEBUG_ASSERT((nullptr != ptr) || (0 == old_size_bytes), "");
         (void) alignment;
 
+        // See `do_allocate` special case for zero bytes.
+        if (new_size_bytes == 0)
+        {
+            if (ptr != empty_storage_.data())
+            {
+                o1heapFree(o1_heap_, ptr);
+            }
+            return empty_storage_.data();
+        }
+
         if (auto* const new_ptr = o1heapAllocate(o1_heap_, new_size_bytes))
         {
             std::memmove(new_ptr, ptr, std::min(old_size_bytes, new_size_bytes));
-            o1heapFree(o1_heap_, ptr);
+
+            // See `do_allocate` special case for zero bytes.
+            if (ptr != empty_storage_.data())
+            {
+                o1heapFree(o1_heap_, ptr);
+            }
+
             return new_ptr;
         }
         return nullptr;
@@ -91,6 +123,10 @@ private:
     // MARK: Data members:
 
     O1HeapInstance* o1_heap_;
+
+    // See `do_allocate` special case for zero bytes.
+    // Note that we still need at least one byte - b/c `std::array<..., 0>::data()` returns `nullptr`.
+    std::array<std::uint8_t, 1> empty_storage_{};
 
 };  // O1HeapMemoryResource
 

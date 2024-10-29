@@ -1,14 +1,14 @@
-/// @copyright
-/// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-/// Copyright Amazon.com Inc. or its affiliates.
-/// SPDX-License-Identifier: MIT
-///
+// This software is distributed under the terms of the MIT License.
+// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+// Copyright Amazon.com Inc. or its affiliates.
+// SPDX-License-Identifier: MIT
+// Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
-#ifndef EXAMPLE_PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED
-#define EXAMPLE_PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED
+#ifndef PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED
+#define PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED
 
-#include "../posix_executor_extension.hpp"
-#include "../posix_platform_error.hpp"
+#include "platform/posix/posix_executor_extension.hpp"
+#include "platform/posix/posix_platform_error.hpp"
 #include "udp.h"
 
 #include <cetl/cetl.hpp>
@@ -26,11 +26,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <string>
 #include <utility>
 
-namespace example
-{
 namespace platform
 {
 namespace posix
@@ -42,10 +39,10 @@ public:
     CETL_NODISCARD static libcyphal::transport::udp::IMedia::MakeTxSocketResult::Type make(
         cetl::pmr::memory_resource& memory,
         libcyphal::IExecutor&       executor,
-        const std::string&          iface_address)
+        const char* const           iface_address)
     {
         UDPTxHandle handle{-1};
-        const auto  result = ::udpTxInit(&handle, ::udpParseIfaceAddress(iface_address.c_str()));
+        const auto  result = ::udpTxInit(&handle, ::udpParseIfaceAddress(iface_address));
         if (result < 0)
         {
             return libcyphal::transport::PlatformError{PosixPlatformError{-result}};
@@ -234,6 +231,5 @@ private:
 
 }  // namespace posix
 }  // namespace platform
-}  // namespace example
 
-#endif  // EXAMPLE_PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED
+#endif  // PLATFORM_POSIX_UDP_SOCKETS_HPP_INCLUDED

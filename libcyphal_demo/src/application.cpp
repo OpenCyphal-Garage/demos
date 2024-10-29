@@ -42,9 +42,9 @@ Application::~Application()
 {
     const auto mr_diag = o1_heap_mr_.queryDiagnostics();
     std::cout << "O(1) Heap diagnostics:" << "\n"
-              << "  tcapacity=" << mr_diag.capacity << "\n"
-              << "  tallocated=" << mr_diag.allocated << "\n"
-              << "  tpeak_allocated=" << mr_diag.peak_allocated << "\n"
-              << "  tpeak_request_size=" << mr_diag.peak_request_size << "\n"
-              << "  toom_count=" << mr_diag.oom_count << "\n";
+              << "  capacity=" << mr_diag.capacity << "\n"
+              << "  allocated=" << mr_diag.allocated << "\n"
+              << "  peak_allocated=" << mr_diag.peak_allocated << "\n"
+              << "  peak_request_size=" << mr_diag.peak_request_size << "\n"
+              << "  oom_count=" << mr_diag.oom_count << "\n";
 }

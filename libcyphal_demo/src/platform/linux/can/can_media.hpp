@@ -1,14 +1,14 @@
-/// @copyright
-/// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-/// Copyright Amazon.com Inc. or its affiliates.
-/// SPDX-License-Identifier: MIT
-///
+// This software is distributed under the terms of the MIT License.
+// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+// Copyright Amazon.com Inc. or its affiliates.
+// SPDX-License-Identifier: MIT
+// Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
-#ifndef EXAMPLE_PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED
-#define EXAMPLE_PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED
+#ifndef PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED
+#define PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED
 
-#include "../../posix/posix_executor_extension.hpp"
-#include "../../posix/posix_platform_error.hpp"
+#include "platform/posix/posix_executor_extension.hpp"
+#include "platform/posix/posix_platform_error.hpp"
 #include "socketcan.h"
 
 #include <canard.h>
@@ -30,8 +30,6 @@
 #include <utility>
 #include <vector>
 
-namespace example
-{
 namespace platform
 {
 // Can't use lowercased `linux` - gnuc++ defines it as macro.
@@ -275,6 +273,5 @@ private:
 
 }  // namespace Linux
 }  // namespace platform
-}  // namespace example
 
-#endif  // EXAMPLE_PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED
+#endif  // PLATFORM_LINUX_CAN_MEDIA_HPP_INCLUDED

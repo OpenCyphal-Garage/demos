@@ -1,30 +1,7 @@
-///                            ____                   ______            __          __
-///                           / __ `____  ___  ____  / ____/_  ______  / /_  ____  / /
-///                          / / / / __ `/ _ `/ __ `/ /   / / / / __ `/ __ `/ __ `/ /
-///                         / /_/ / /_/ /  __/ / / / /___/ /_/ / /_/ / / / / /_/ / /
-///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
-///                             /_/                     /____/_/
-///
-/// This is a basic adapter library that bridges Libcanard with SocketCAN.
-/// Read the API documentation for usage information.
-///
-/// To integrate the library into your application, just copy-paste the c/h files into your project tree.
-///
-/// --------------------------------------------------------------------------------------------------------------------
-/// Changelog
-///
-/// v3.0 - Update for compatibility with Libcanard v3.
-///
-/// v2.0 - Added loop-back functionality.
-///        API change in socketcanPop(): loopback flag added.
-///      - Changed to kernel-based time-stamping for received frames for improved accuracy.
-///        API change in socketcanPop(): time stamp clock source is now CLOCK_REALTIME, vs CLOCK_TAI before.
-///
-/// v1.0 - Initial release
-/// --------------------------------------------------------------------------------------------------------------------
-///
-/// This software is distributed under the terms of the MIT License.
-/// Copyright (c) 2020 OpenCyphal
+// This software is distributed under the terms of the MIT License.
+// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+// Copyright Amazon.com Inc. or its affiliates.
+// SPDX-License-Identifier: MIT
 /// Author: Pavel Kirienko <pavel.kirienko@zubax.com>
 
 #ifndef SOCKETCAN_H_INCLUDED

@@ -1,7 +1,7 @@
-/// This software is distributed under the terms of the MIT License.
-/// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-/// Copyright Amazon.com Inc. or its affiliates.
-/// SPDX-License-Identifier: MIT
+// This software is distributed under the terms of the MIT License.
+// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+// Copyright Amazon.com Inc. or its affiliates.
+// SPDX-License-Identifier: MIT
 /// Author: Pavel Kirienko <pavel@opencyphal.org>
 
 #include "udp.h"
