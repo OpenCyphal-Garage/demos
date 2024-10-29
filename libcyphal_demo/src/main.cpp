@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 
 using namespace std::chrono_literals;
@@ -95,16 +96,28 @@ int main()
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
 
-    // 4. Bring up registry provider, and expose several registers.
+    // 4. Populate the node info.
+    //
+    // The hardware version is not populated in this demo because it runs on no specific hardware.
+    // An embedded node would usually determine the version by querying the hardware.
+    auto& get_info                    = node.getInfoProvider().response();
+    get_info.software_version.major   = VERSION_MAJOR;
+    get_info.software_version.minor   = VERSION_MINOR;
+    get_info.software_vcs_revision_id = VCS_REVISION_ID;
+    //
+    const cetl::string_view node_name{NODE_NAME};
+    get_info.name.resize(node_name.size());
+    (void) std::memmove(get_info.name.data(), node_name.data(), get_info.name.size());
+
+    // 5. Bring up registry provider, and expose several registers.
     //
     if (const auto failure = node.makeRegistryProvider(application.registry()))
     {
         std::cerr << "Failed to create registry provider.\n";
         return 11;
     }
-    // Expose GetInfo::name as mutable node description.
-    auto& get_info      = node.getInfoProvider().response();
-    auto  reg_node_desc = application.registry().route(  //
+    // Expose `get_info.name` as mutable node description.
+    auto reg_node_desc = application.registry().route(  //
         "uavcan.node.description",
         [&memory, &get_info] {
             //
