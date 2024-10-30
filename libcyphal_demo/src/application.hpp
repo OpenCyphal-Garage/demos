@@ -48,7 +48,7 @@ public:
                               this->value_ = libcyphal::application::registry::makeStringView(value.get_string().value);
                               return cetl::nullopt;
                           }
-                          return libcyphal::application::registry::SetError::Coercion;
+                          return libcyphal::application::registry::SetError::Semantics;
                       })}
             {
             }
