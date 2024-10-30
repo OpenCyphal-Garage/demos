@@ -5,6 +5,7 @@
 // Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
 #include "application.hpp"
+#include "exec_cmd_provider.hpp"
 #include "platform/common_helpers.hpp"
 #include "platform/posix/udp/udp_media.hpp"
 
@@ -20,6 +21,7 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <unistd.h>  // execve
 
 using namespace std::chrono_literals;
 
@@ -29,6 +31,53 @@ using Callback = libcyphal::IExecutor::Callback;
 
 namespace
 {
+
+class AppExecCmdProvider final : public ExecCmdProvider<AppExecCmdProvider>
+{
+public:
+    using ExecCmdProvider::ExecCmdProvider;
+
+    bool should_break() const noexcept
+    {
+        return should_power_off_ || restart_required_;
+    }
+
+    bool should_power_off() const noexcept
+    {
+        return should_power_off_;
+    }
+
+private:
+    bool onCommand(const Request::_traits_::TypeOf::command command,
+                   const cetl::string_view                  parameter,
+                   Response&                                response) noexcept override
+    {
+        switch (command)
+        {
+        case Request::COMMAND_POWER_OFF:
+            //
+            std::cout << "COMMAND_POWER_OFF\n";
+            response.status   = Response::STATUS_SUCCESS;
+            should_power_off_ = true;
+            break;
+
+        case Request::COMMAND_RESTART:
+            //
+            std::cout << "COMMAND_RESTART\n";
+            response.status   = Response::STATUS_SUCCESS;
+            restart_required_ = true;
+            break;
+
+        default:
+            return ExecCmdProvider::onCommand(command, parameter, response);
+        }
+        return true;
+    }
+
+    bool should_power_off_{false};
+    bool restart_required_{false};
+
+};  // AppExecCmdProvider
 
 /// Helper function to create a register string value.
 ///
@@ -46,11 +95,9 @@ libcyphal::application::registry::IRegister::Value makeStringValue(cetl::pmr::me
     return value;
 }
 
-}  // namespace
-
-int main()
+bool run_application()
 {
-    std::cout << "LibCyphal demo.\n";
+    std::cout << "\n************************************\nLibCyphal demo.\n";
 
     constexpr std::size_t TxQueueCapacity = 16;
 
@@ -132,13 +179,22 @@ int main()
             return cetl::nullopt;
         });
 
+    // 5. Bring up the command execution provider.
+    //
+    auto maybe_exec_cmd_provider = AppExecCmdProvider::make(presentation);
+    if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
+    {
+        std::cerr << "Failed to create exec cmd provider.\n";
+        return 12;
+    }
+    auto exec_cmd_provider = cetl::get<AppExecCmdProvider>(std::move(maybe_exec_cmd_provider));
+
     // Main loop.
     //
-    libcyphal::Duration        worst_lateness{0};
-    const libcyphal::TimePoint deadline = executor.now() + 10s;
+    libcyphal::Duration worst_lateness{0};
     std::cout << "-----------\nRunning..." << std::endl;  // NOLINT
     //
-    while (executor.now() < deadline)
+    while (!exec_cmd_provider.should_break())
     {
         const auto spin_result = executor.spinOnce();
         worst_lateness         = std::max(worst_lateness, spin_result.worst_lateness);
@@ -154,6 +210,23 @@ int main()
     std::cout << "Done.\n-----------\nRun Stats:\n";
     std::cout << "  worst_callback_lateness=" << worst_lateness.count() << "us\n";
 
+    return !exec_cmd_provider.should_power_off();
+}
+
+}  // namespace
+
+int main(const int argc, char* const argv[])
+{
+    (void) argc;
+
+    if (run_application())
+    {
+        std::cout.flush();
+        std::cerr << "\nRESTART" << std::endl;       // NOLINT
+        return -::execve(argv[0], argv, ::environ);  // NOLINT
+    }
+
+    std::cerr << "\nPOWER OFF\n";
     return 0;
 }
 
