@@ -95,7 +95,7 @@ libcyphal::application::registry::IRegister::Value makeStringValue(cetl::pmr::me
     return value;
 }
 
-bool run_application()
+libcyphal::Expected<bool, int> run_application()
 {
     std::cout << "\n************************************\nLibCyphal demo.\n";
 
@@ -215,14 +215,18 @@ bool run_application()
 
 }  // namespace
 
-int main(const int argc, char* const argv[])
+int main(const int, char* const argv[])
 {
-    (void) argc;
+    const auto result = run_application();
+    if (const auto* const err = cetl::get_if<int>(&result))
+    {
+        return *err;
+    }
 
-    if (run_application())
+    if (cetl::get<bool>(result))
     {
         std::cout.flush();
-        std::cerr << "\nRESTART" << std::endl;       // NOLINT
+        std::cerr << "\nRESTART\n";
         return -::execve(argv[0], argv, ::environ);  // NOLINT
     }
 
