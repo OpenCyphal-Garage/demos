@@ -90,7 +90,7 @@ public:
         libcyphal::application::registry::Registry& registry_;
 
         // clang-format off
-        StringParam<64>     can_iface_{ "uavcan.can.iface",         registry_,  {""},           {true}};
+        StringParam<64>     can_iface_{ "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
         StringParam<50>     node_desc_{ "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
         StringParam<64>     udp_iface_{ "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
         // clang-format on

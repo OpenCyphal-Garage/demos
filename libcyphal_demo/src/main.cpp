@@ -6,17 +6,16 @@
 
 #include "application.hpp"
 #include "exec_cmd_provider.hpp"
-#include "platform/common_helpers.hpp"
-#include "platform/posix/udp/udp_media.hpp"
 #include "platform/storage.hpp"
+#include "transport_bag_can.hpp"
+#include "transport_bag_udp.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/application/node.hpp>
 #include <libcyphal/application/registry/registry.hpp>
 #include <libcyphal/application/registry/registry_impl.hpp>
 #include <libcyphal/executor.hpp>
-#include <libcyphal/transport/can/can_transport_impl.hpp>
-#include <libcyphal/transport/udp/udp_transport_impl.hpp>
+#include <libcyphal/transport/transport.hpp>
 #include <libcyphal/types.hpp>
 
 #include <algorithm>
@@ -92,27 +91,9 @@ private:
 
 };  // AppExecCmdProvider
 
-/// Helper function to create a register string value.
-///
-libcyphal::application::registry::IRegister::Value makeStringValue(cetl::pmr::memory_resource& memory,
-                                                                   const cetl::string_view     sv)
-{
-    using Value = libcyphal::application::registry::IRegister::Value;
-
-    const Value::allocator_type alloc{&memory};
-    Value                       value{alloc};
-
-    auto& str = value.set_string();
-    std::copy(sv.begin(), sv.end(), std::back_inserter(str.value));
-
-    return value;
-}
-
 libcyphal::Expected<bool, int> run_application()
 {
-    std::cout << "\n🟢 ************************************\nLibCyphal demo.\n";
-
-    constexpr std::size_t TxQueueCapacity = 16;
+    std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
 
     Application application;
     auto&       memory   = application.memory();
@@ -126,34 +107,28 @@ libcyphal::Expected<bool, int> run_application()
     auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
 
-    // 1. Create the transport layer object.
+    // 1. Create the transport layer object. First try CAN, then UDP.
     //
-    libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport> upd_transport;
-    platform::posix::UdpMediaCollection                            udp_media_collection{memory, executor};
-    if (!iface_params.udp_iface.value().empty())
+    TransportBagCan transport_bag_can{memory, executor};
+    TransportBagUdp transport_bag_udp{memory, executor};
+    //
+    libcyphal::transport::ITransport* transport_iface = transport_bag_can.create(iface_params);
+    if (transport_iface == nullptr)
     {
-        udp_media_collection.parse(iface_params.udp_iface.value());
-        auto maybe_udp_transport = makeTransport({memory}, executor, udp_media_collection.span(), TxQueueCapacity);
-        if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_udp_transport))
-        {
-            std::cerr << "❌ Failed to create UDP transport (iface='"
-                      << static_cast<cetl::string_view>(iface_params.udp_iface.value()) << "').\n";
-            return 2;
-        }
-        upd_transport = cetl::get<libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport>>(  //
-            std::move(maybe_udp_transport));
-
-        std::cout << "Node ID   : " << 7 << "\n";
-        std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
-        std::cout << "Interfaces: '" << iface_params.udp_iface.value().c_str() << "'\n";
-
-        upd_transport->setLocalNodeId(7);
-        upd_transport->setTransientErrorHandler(platform::CommonHelpers::Udp::transientErrorReporter);
+        transport_iface = transport_bag_udp.create(iface_params);
     }
+    if (transport_iface == nullptr)
+    {
+        std::cerr << "❌ Failed to create any transport.\n";
+        return 1;
+    }
+    transport_iface->setLocalNodeId(7);  // TODO: Make it configurable via "uavcan.node.id" register.
+    std::cout << "Node ID   : " << 7 << "\n";
+    std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
 
     // 2. Create the presentation layer object.
     //
-    libcyphal::presentation::Presentation presentation{memory, executor, *upd_transport};
+    libcyphal::presentation::Presentation presentation{memory, executor, *transport_iface};
 
     // 3. Create the node object with name.
     //

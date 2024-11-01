@@ -72,6 +72,8 @@ private:
 
 };  // UdpMedia
 
+// MARK: -
+
 struct UdpMediaCollection
 {
     UdpMediaCollection(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor)
