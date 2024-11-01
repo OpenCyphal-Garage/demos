@@ -30,9 +30,10 @@ public:
         template <std::size_t N>
         struct StringParam
         {
-            StringParam(const libcyphal::application::registry::IRegister::Name name,
-                        libcyphal::application::registry::Registry&             registry,
-                        const cetl::string_view                                 initial_value)
+            StringParam(const libcyphal::application::registry::IRegister::Name     name,
+                        libcyphal::application::registry::Registry&                 registry,
+                        const cetl::string_view                                     initial_value,
+                        const libcyphal::application::registry::IRegister::Options& options = {})
                 : value_{initial_value}
                 , memory_{registry.memory()}
                 , register_{registry.route(
@@ -49,7 +50,8 @@ public:
                               return cetl::nullopt;
                           }
                           return libcyphal::application::registry::SetError::Semantics;
-                      })}
+                      },
+                      options)}
             {
             }
 
@@ -87,8 +89,11 @@ public:
 
         libcyphal::application::registry::Registry& registry_;
 
-        StringParam<64> udp_iface_{"uavcan.udp.iface", registry_, {"127.0.0.1"}};
-        StringParam<64> can_iface_{"uavcan.can.iface", registry_, {""}};
+        // clang-format off
+        StringParam<64>     can_iface_{ "uavcan.can.iface",         registry_,  {""},           {true}};
+        StringParam<50>     node_desc_{ "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
+        StringParam<64>     udp_iface_{ "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        // clang-format on
 
     };  // Regs
 
@@ -96,6 +101,11 @@ public:
     {
         Regs::StringParam<64>& udp_iface;
         Regs::StringParam<64>& can_iface;
+    };
+
+    struct NodeParams
+    {
+        Regs::StringParam<50>& description;
     };
 
     Application();
@@ -124,6 +134,11 @@ public:
     CETL_NODISCARD IfaceParams getIfaceParams() noexcept
     {
         return {regs_.udp_iface_, regs_.can_iface_};
+    }
+
+    CETL_NODISCARD NodeParams getNodeParams() noexcept
+    {
+        return {regs_.node_desc_};
     }
 
 private:
