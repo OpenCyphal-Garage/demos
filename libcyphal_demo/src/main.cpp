@@ -6,30 +6,23 @@
 
 #include "application.hpp"
 #include "exec_cmd_provider.hpp"
-#include "platform/storage.hpp"
 #include "transport_bag_can.hpp"
 #include "transport_bag_udp.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/application/node.hpp>
-#include <libcyphal/application/registry/registry.hpp>
-#include <libcyphal/application/registry/registry_impl.hpp>
-#include <libcyphal/executor.hpp>
+#include <libcyphal/presentation/presentation.hpp>
 #include <libcyphal/transport/transport.hpp>
 #include <libcyphal/types.hpp>
-
-#include <uavcan/node/GetInfo_1_0.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <iostream>
-#include <random>
 #include <unistd.h>  // execve
+#include <utility>
 
 using namespace std::chrono_literals;
-
-using Callback = libcyphal::IExecutor::Callback;
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
@@ -94,30 +87,6 @@ private:
 
 };  // AppExecCmdProvider
 
-/// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
-///
-void getUniqueId(libcyphal::platform::storage::IKeyValue&                          storage,
-                 uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out)
-{
-    using unique_id    = uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id;
-
-    const auto result = storage.get(".unique_id", out);
-    if (cetl::get_if<libcyphal::platform::storage::Error>(&result) != nullptr)
-    {
-        std::random_device                          rd;           // Seed for the random number engine
-        std::mt19937                                gen(rd());    // Mersenne Twister engine
-        std::uniform_int_distribution<std::uint8_t> dis(0, 255);  // Distribution range for bytes
-
-        // Populate the default; it is only used at the first run.
-        for (auto& b : out)
-        {
-            b = dis(gen);
-        }
-
-        (void) storage.put(".unique_id", out);
-    }
-}
-
 libcyphal::Expected<bool, int> run_application()
 {
     std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
@@ -125,11 +94,6 @@ libcyphal::Expected<bool, int> run_application()
     Application application;
     auto&       memory   = application.memory();
     auto&       executor = application.executor();
-
-    // 0. Load registry from persistent storage.
-    //
-    platform::storage::KeyValue platform_storage("/tmp/" NODE_NAME);
-    load(platform_storage, application.registry());
 
     auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
@@ -149,8 +113,8 @@ libcyphal::Expected<bool, int> run_application()
         std::cerr << "❌ Failed to create any transport.\n";
         return 1;
     }
-    transport_iface->setLocalNodeId(7);  // TODO: Make it configurable via "uavcan.node.id" register.
-    std::cout << "Node ID   : " << 7 << "\n";
+    (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
+    std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
     std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
 
     // 2. Create the presentation layer object.
@@ -180,7 +144,7 @@ libcyphal::Expected<bool, int> run_application()
     get_info.name.resize(node_params.description.value().size());
     (void) std::memmove(get_info.name.data(), node_params.description.value().data(), get_info.name.size());
     //
-    getUniqueId(platform_storage, get_info.unique_id);
+    application.getUniqueId(get_info.unique_id);
 
     // 5. Bring up registry provider.
     //
@@ -220,8 +184,6 @@ libcyphal::Expected<bool, int> run_application()
     //
     std::cout << "🏁 Done.\n-----------\nRun Stats:\n";
     std::cout << "  worst_callback_lateness=" << worst_lateness.count() << "us\n";
-
-    save(platform_storage, application.registry());
 
     return !exec_cmd_provider.should_power_off();
 }

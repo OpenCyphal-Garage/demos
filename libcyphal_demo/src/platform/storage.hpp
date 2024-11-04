@@ -15,6 +15,7 @@
 
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <sys/stat.h>
 
@@ -31,6 +32,8 @@ namespace storage
 ///
 class KeyValue final : public libcyphal::platform::storage::IKeyValue
 {
+    using Error = libcyphal::platform::storage::Error;
+
 public:
     explicit KeyValue(const char* const root_path)
         : root_path_{root_path}
@@ -42,19 +45,7 @@ public:
         }
     }
 
-private:
-    static constexpr std::size_t MaxPathLen = 64;
-    using StringPath                        = String<MaxPathLen>;
-    using Error                             = libcyphal::platform::storage::Error;
-
-    StringPath makeFilePath(const cetl::string_view key) const
-    {
-        StringPath file_path{root_path_};
-        file_path << "/" << key;
-        return file_path;
-    }
-
-    // MARK: - libcyphal::platform::storage::IKeyValue
+    // MARK: - IKeyValue
 
     auto get(const cetl::string_view        key,
              const cetl::span<std::uint8_t> data) const -> libcyphal::Expected<std::size_t, Error> override
@@ -98,6 +89,17 @@ private:
             return Error::IO;
         }
         return cetl::nullopt;
+    }
+
+private:
+    static constexpr std::size_t MaxPathLen = 64;
+    using StringPath                        = String<MaxPathLen>;
+
+    StringPath makeFilePath(const cetl::string_view key) const
+    {
+        StringPath file_path{root_path_};
+        file_path << "/" << key;
+        return file_path;
     }
 
     const cetl::string_view root_path_;

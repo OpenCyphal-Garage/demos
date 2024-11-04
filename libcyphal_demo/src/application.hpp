@@ -9,12 +9,21 @@
 
 #include "platform/linux/epoll_single_threaded_executor.hpp"
 #include "platform/o1_heap_memory_resource.hpp"
+#include "platform/storage.hpp"
 #include "platform/string.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/application/registry/register.hpp>
 #include <libcyphal/application/registry/registry_impl.hpp>
-#include <libcyphal/types.hpp>
+#include <libcyphal/platform/storage.hpp>
+
+#include <uavcan/node/GetInfo_1_0.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
 
 /// The main application class.
 ///
@@ -23,6 +32,9 @@
 class Application final
 {
 public:
+    static constexpr std::size_t MaxIfaceLen = 64;
+    static constexpr std::size_t MacNodeDesc = 50;
+
     struct Regs
     {
         /// Defines general purpose string parameter exposed as mutable register.
@@ -79,6 +91,61 @@ public:
 
         };  // StringParam
 
+        /// Defines general purpose uint16 array parameter exposed as mutable register.
+        ///
+        template <std::size_t N>
+        struct Natural16Param
+        {
+            Natural16Param(const libcyphal::application::registry::IRegister::Name     name,
+                           libcyphal::application::registry::Registry&                 registry,
+                           const std::array<std::uint16_t, N>                          initial_value,
+                           const libcyphal::application::registry::IRegister::Options& options = {})
+                : value_{initial_value}
+                , memory_{registry.memory()}
+                , register_{registry.route(
+                      name,
+                      [this] { return makeNatural16Value(); },
+                      [this](const auto& value) -> cetl::optional<libcyphal::application::registry::SetError> {
+                          //
+                          if (value.is_natural16())
+                          {
+                              const auto&       uint16s = value.get_natural16().value;
+                              const std::size_t count   = std::min(uint16s.size(), value_.size());
+                              for (std::size_t i = 0; i < count; ++i)
+                              {
+                                  value_[i] = uint16s[i];  // NOLINT
+                              }
+                              return cetl::nullopt;
+                          }
+                          return libcyphal::application::registry::SetError::Semantics;
+                      },
+                      options)}
+            {
+            }
+
+            CETL_NODISCARD std::array<std::uint16_t, N>& value()
+            {
+                return value_;
+            }
+
+        private:
+            CETL_NODISCARD libcyphal::application::registry::IRegister::Value makeNatural16Value() const
+            {
+                using Value = libcyphal::application::registry::IRegister::Value;
+
+                const Value::allocator_type allocator{&memory_};
+                Value                       value{allocator};
+                auto&                       uint16s = value.set_natural16();
+                uint16s.value.push_back(value_.front());
+                return value;
+            }
+
+            std::array<std::uint16_t, N>                                   value_;
+            cetl::pmr::memory_resource&                                    memory_;
+            libcyphal::application::registry::Register<sizeof(void*) * 12> register_;
+
+        };  // Natural16Param
+
         explicit Regs(libcyphal::application::registry::Registry& registry)
             : registry_{registry}
         {
@@ -90,22 +157,24 @@ public:
         libcyphal::application::registry::Registry& registry_;
 
         // clang-format off
-        StringParam<64>     can_iface_{ "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
-        StringParam<50>     node_desc_{ "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
-        StringParam<64>     udp_iface_{ "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        StringParam<MaxIfaceLen>     can_iface_ { "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
+        StringParam<MacNodeDesc>     node_desc_ { "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
+        Natural16Param<1>            node_id_   { "uavcan.node.id",           registry_,  {65535U},       {true}};
+        StringParam<MaxIfaceLen>     udp_iface_ { "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
         // clang-format on
 
     };  // Regs
 
     struct IfaceParams
     {
-        Regs::StringParam<64>& udp_iface;
-        Regs::StringParam<64>& can_iface;
+        Regs::StringParam<MaxIfaceLen>& udp_iface;
+        Regs::StringParam<MaxIfaceLen>& can_iface;
     };
 
     struct NodeParams
     {
-        Regs::StringParam<50>& description;
+        Regs::Natural16Param<1>&        id;
+        Regs::StringParam<MacNodeDesc>& description;
     };
 
     Application();
@@ -138,14 +207,19 @@ public:
 
     CETL_NODISCARD NodeParams getNodeParams() noexcept
     {
-        return {regs_.node_desc_};
+        return {regs_.node_id_, regs_.node_desc_};
     }
+
+    /// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
+    ///
+    void getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out);
 
 private:
     // MARK: Data members:
 
     platform::Linux::EpollSingleThreadedExecutor executor_;
     platform::O1HeapMemoryResource               o1_heap_mr_;
+    platform::storage::KeyValue                  storage_;
     libcyphal::application::registry::Registry   registry_;
     Regs                                         regs_;
 
