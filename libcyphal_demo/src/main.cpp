@@ -99,15 +99,14 @@ private:
 void getUniqueId(libcyphal::platform::storage::IKeyValue&                          storage,
                  uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out)
 {
-    using StorageError = libcyphal::platform::storage::Error;
     using unique_id    = uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id;
 
     const auto result = storage.get(".unique_id", out);
-    if (cetl::get_if<StorageError>(&result) != nullptr)
+    if (cetl::get_if<libcyphal::platform::storage::Error>(&result) != nullptr)
     {
-        std::random_device                     rd;           // Seed for the random number engine
-        std::mt19937                           gen(rd());    // Mersenne Twister engine
-        std::uniform_int_distribution<uint8_t> dis(0, 255);  // Distribution range for bytes
+        std::random_device                          rd;           // Seed for the random number engine
+        std::mt19937                                gen(rd());    // Mersenne Twister engine
+        std::uniform_int_distribution<std::uint8_t> dis(0, 255);  // Distribution range for bytes
 
         // Populate the default; it is only used at the first run.
         for (auto& b : out)
