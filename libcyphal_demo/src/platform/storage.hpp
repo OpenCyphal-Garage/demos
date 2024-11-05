@@ -95,6 +95,13 @@ private:
     static constexpr std::size_t MaxPathLen = 64;
     using StringPath                        = String<MaxPathLen>;
 
+    /// In practice, the keys could be hashed, so it won't be necessary to deal with directory nesting.
+    /// This is fine b/c we don't need key listing, and so we don't have to retain the key names.
+    ///
+    /// But with the below implementation, users can easily remove a single value by deleting
+    /// the corresponding file on their system (under `/tmp/org.opencyphal.demos.libcyphal/` folder) -
+    /// with hashes it would be harder to figure out which file to delete.
+    ///
     StringPath makeFilePath(const cetl::string_view key) const
     {
         StringPath file_path{root_path_};
