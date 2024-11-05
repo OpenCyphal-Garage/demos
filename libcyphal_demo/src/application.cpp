@@ -36,6 +36,8 @@ Application::Application()
     , registry_{o1_heap_mr_}
     , regs_{registry_}
 {
+    cetl::pmr::set_default_resource(&o1_heap_mr_);
+
     load(storage_, registry_);
 
     // Maybe override some of the registry values with environment variables.
@@ -67,6 +69,8 @@ Application::~Application()
               << "  peak_allocated=" << mr_diag.peak_allocated << "\n"
               << "  peak_request_size=" << mr_diag.peak_request_size << "\n"
               << "  oom_count=" << mr_diag.oom_count << "\n";
+
+    cetl::pmr::set_default_resource(cetl::pmr::new_delete_resource());
 }
 
 /// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
