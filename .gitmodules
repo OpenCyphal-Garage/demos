@@ -16,4 +16,4 @@
 [submodule "submodules/libcyphal"]
 	path = submodules/libcyphal
 	url = https://github.com/OpenCyphal-Garage/libcyphal.git
-	branch = sshirokov/reg_storage
+	branch = issue/registry

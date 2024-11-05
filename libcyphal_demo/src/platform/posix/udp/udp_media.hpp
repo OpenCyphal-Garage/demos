@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 // Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
-#ifndef PLATFORM_POSIX_UPD_MEDIA_HPP_INCLUDED
-#define PLATFORM_POSIX_UPD_MEDIA_HPP_INCLUDED
+#ifndef PLATFORM_POSIX_UDP_MEDIA_HPP_INCLUDED
+#define PLATFORM_POSIX_UDP_MEDIA_HPP_INCLUDED
 
 #include "platform/string.hpp"
 #include "udp_sockets.hpp"
@@ -123,4 +123,4 @@ private:
 }  // namespace posix
 }  // namespace platform
 
-#endif  // PLATFORM_POSIX_UPD_MEDIA_HPP_INCLUDED
+#endif  // PLATFORM_POSIX_UDP_MEDIA_HPP_INCLUDED

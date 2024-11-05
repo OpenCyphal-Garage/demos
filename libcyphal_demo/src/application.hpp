@@ -32,11 +32,20 @@
 class Application final
 {
 public:
+    // Defines max length of various strings.
     static constexpr std::size_t MaxIfaceLen = 64;
     static constexpr std::size_t MacNodeDesc = 50;
 
     struct Regs
     {
+        /// Defines the footprint size of the type-erased register.
+        /// The Footprint size is passed to internal unbounded variant
+        /// which in turn should be big enough to store any register implementation.
+        /// `12`-pointer size is a trade-off between memory usage and flexibility of what could be stored.
+        /// Increase this value if you need to store more complex data (like more "big" register's lambdas).
+        ///
+        static constexpr std::size_t RegisterFootprint = sizeof(void*) * 12;
+
         /// Defines general purpose string parameter exposed as mutable register.
         ///
         template <std::size_t N>
@@ -85,9 +94,9 @@ public:
                 return value;
             }
 
-            platform::String<N>                                            value_;
-            cetl::pmr::memory_resource&                                    memory_;
-            libcyphal::application::registry::Register<sizeof(void*) * 12> register_;
+            platform::String<N>                                           value_;
+            cetl::pmr::memory_resource&                                   memory_;
+            libcyphal::application::registry::Register<RegisterFootprint> register_;
 
         };  // StringParam
 
@@ -140,9 +149,9 @@ public:
                 return value;
             }
 
-            std::array<std::uint16_t, N>                                   value_;
-            cetl::pmr::memory_resource&                                    memory_;
-            libcyphal::application::registry::Register<sizeof(void*) * 12> register_;
+            std::array<std::uint16_t, N>                                  value_;
+            cetl::pmr::memory_resource&                                   memory_;
+            libcyphal::application::registry::Register<RegisterFootprint> register_;
 
         };  // Natural16Param
 

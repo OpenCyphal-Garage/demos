@@ -87,7 +87,20 @@ private:
 
 };  // AppExecCmdProvider
 
-libcyphal::Expected<bool, int> run_application()
+/// Defines various exit codes for the demo application.
+///
+enum class ExitCode : std::uint8_t
+{
+    Success                        = 0,
+    TransportCreationFailure       = 1,
+    NodeCreationFailure            = 2,
+    RegistryCreationFailure        = 3,
+    ExecCmdProviderCreationFailure = 4,
+    RestartFailure                 = 5,
+
+};  // ExitCode
+
+libcyphal::Expected<bool, ExitCode> run_application()
 {
     std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
 
@@ -111,7 +124,7 @@ libcyphal::Expected<bool, int> run_application()
     if (transport_iface == nullptr)
     {
         std::cerr << "❌ Failed to create any transport.\n";
-        return 1;
+        return ExitCode::TransportCreationFailure;
     }
     (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
     std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
@@ -128,7 +141,8 @@ libcyphal::Expected<bool, int> run_application()
     {
         std::cerr << "❌ Failed to create node (iface='"
                   << static_cast<cetl::string_view>(iface_params.udp_iface.value()) << "').\n";
-        return 10;
+        return ExitCode::NodeCreationFailure;
+        ;
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
 
@@ -151,7 +165,7 @@ libcyphal::Expected<bool, int> run_application()
     if (const auto failure = node.makeRegistryProvider(application.registry()))
     {
         std::cerr << "❌ Failed to create registry provider.\n";
-        return 11;
+        return ExitCode::RegistryCreationFailure;
     }
 
     // 6. Bring up the command execution provider.
@@ -160,7 +174,7 @@ libcyphal::Expected<bool, int> run_application()
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
     {
         std::cerr << "❌ Failed to create exec cmd provider.\n";
-        return 12;
+        return ExitCode::ExecCmdProviderCreationFailure;
     }
     auto exec_cmd_provider = cetl::get<AppExecCmdProvider>(std::move(maybe_exec_cmd_provider));
 
@@ -193,16 +207,19 @@ libcyphal::Expected<bool, int> run_application()
 int main(const int, char* const argv[])
 {
     const auto result = run_application();
-    if (const auto* const err = cetl::get_if<int>(&result))
+    if (const auto* const err = cetl::get_if<ExitCode>(&result))
     {
-        return *err;
+        return static_cast<int>(*err);
     }
 
+    // Should we restart?
     if (cetl::get<bool>(result))
     {
-        return -::execve(argv[0], argv, ::environ);  // NOLINT
+        (void) ::execve(argv[0], argv, ::environ);  // NOLINT
+        return static_cast<int>(ExitCode::RestartFailure);
     }
-    return 0;
+
+    return static_cast<int>(ExitCode::Success);
 }
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
