@@ -29,7 +29,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@23b84f76d4fc0e75595efc02fde30140e3cef2fb
+          pip install git+https://github.com/OpenCyphal/nunavut.git@7f62204ddec9e5d4fbe4a969f9fcdfd5d045d35b
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
