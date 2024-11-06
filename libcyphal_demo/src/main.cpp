@@ -6,15 +6,13 @@
 
 #include "application.hpp"
 #include "exec_cmd_provider.hpp"
-#include "platform/common_helpers.hpp"
-#include "platform/posix/udp/udp_media.hpp"
+#include "transport_bag_can.hpp"
+#include "transport_bag_udp.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/application/node.hpp>
-#include <libcyphal/application/registry/registry.hpp>
-#include <libcyphal/executor.hpp>
-#include <libcyphal/transport/can/can_transport_impl.hpp>
-#include <libcyphal/transport/udp/udp_transport_impl.hpp>
+#include <libcyphal/presentation/presentation.hpp>
+#include <libcyphal/transport/transport.hpp>
 #include <libcyphal/types.hpp>
 
 #include <algorithm>
@@ -22,10 +20,9 @@
 #include <cstring>
 #include <iostream>
 #include <unistd.h>  // execve
+#include <utility>
 
 using namespace std::chrono_literals;
-
-using Callback = libcyphal::IExecutor::Callback;
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
 
@@ -52,19 +49,30 @@ private:
                    const cetl::string_view                  parameter,
                    Response&                                response) noexcept override
     {
+        response.status = Response::STATUS_SUCCESS;
+
         switch (command)
         {
         case Request::COMMAND_POWER_OFF:
             //
-            std::cout << "COMMAND_POWER_OFF\n";
-            response.status   = Response::STATUS_SUCCESS;
+            std::cout << "🛑 COMMAND_POWER_OFF\n";
             should_power_off_ = true;
             break;
 
         case Request::COMMAND_RESTART:
             //
-            std::cout << "COMMAND_RESTART\n";
-            response.status   = Response::STATUS_SUCCESS;
+            std::cout << "♻️ COMMAND_RESTART\n";
+            restart_required_ = true;
+            break;
+
+        case Request::COMMAND_IDENTIFY:
+            //
+            std::cout << "🔔 COMMAND_IDENTIFY\n";
+            break;
+
+        case Request::COMMAND_STORE_PERSISTENT_STATES:
+            //
+            std::cout << "💾 COMMAND_STORE_PERSISTENT_STATES\n";
             restart_required_ = true;
             break;
 
@@ -79,67 +87,62 @@ private:
 
 };  // AppExecCmdProvider
 
-/// Helper function to create a register string value.
+/// Defines various exit codes for the demo application.
 ///
-libcyphal::application::registry::IRegister::Value makeStringValue(cetl::pmr::memory_resource& memory,
-                                                                   const cetl::string_view     sv)
+enum class ExitCode : std::uint8_t
 {
-    using Value = libcyphal::application::registry::IRegister::Value;
+    Success                        = 0,
+    TransportCreationFailure       = 1,
+    NodeCreationFailure            = 2,
+    RegistryCreationFailure        = 3,
+    ExecCmdProviderCreationFailure = 4,
+    RestartFailure                 = 5,
 
-    const Value::allocator_type alloc{&memory};
-    Value                       value{alloc};
+};  // ExitCode
 
-    auto& str = value.set_string();
-    std::copy(sv.begin(), sv.end(), std::back_inserter(str.value));
-
-    return value;
-}
-
-libcyphal::Expected<bool, int> run_application()
+libcyphal::Expected<bool, ExitCode> run_application()
 {
-    std::cout << "\n************************************\nLibCyphal demo.\n";
-
-    constexpr std::size_t TxQueueCapacity = 16;
+    std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
 
     Application application;
     auto&       memory   = application.memory();
     auto&       executor = application.executor();
 
+    auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
 
-    // 1. Create the transport layer object.
+    // 1. Create the transport layer object. First try CAN, then UDP.
     //
-    libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport> upd_transport;
-    platform::posix::UdpMediaCollection                            udp_media_collection{memory, executor};
-    if (!iface_params.udp_iface.value().empty())
+    TransportBagCan transport_bag_can{memory, executor};
+    TransportBagUdp transport_bag_udp{memory, executor};
+    //
+    libcyphal::transport::ITransport* transport_iface = transport_bag_can.create(iface_params);
+    if (transport_iface == nullptr)
     {
-        udp_media_collection.parse(iface_params.udp_iface.value());
-        auto maybe_udp_transport = makeTransport({memory}, executor, udp_media_collection.span(), TxQueueCapacity);
-        if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_udp_transport))
-        {
-            std::cerr << "Failed to create UDP transport (iface='"
-                      << static_cast<cetl::string_view>(iface_params.udp_iface.value()) << "').\n";
-            return 2;
-        }
-        upd_transport = cetl::get<libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport>>(  //
-            std::move(maybe_udp_transport));
-
-        upd_transport->setLocalNodeId(7);
-        upd_transport->setTransientErrorHandler(platform::CommonHelpers::Udp::transientErrorReporter);
+        transport_iface = transport_bag_udp.create(iface_params);
     }
+    if (transport_iface == nullptr)
+    {
+        std::cerr << "❌ Failed to create any transport.\n";
+        return ExitCode::TransportCreationFailure;
+    }
+    (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
+    std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
+    std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
 
     // 2. Create the presentation layer object.
     //
-    libcyphal::presentation::Presentation presentation{memory, executor, *upd_transport};
+    libcyphal::presentation::Presentation presentation{memory, executor, *transport_iface};
 
     // 3. Create the node object with name.
     //
     auto maybe_node = libcyphal::application::Node::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
     {
-        std::cerr << "Failed to create node (iface='" << static_cast<cetl::string_view>(iface_params.udp_iface.value())
-                  << "').\n";
-        return 10;
+        std::cerr << "❌ Failed to create node (iface='"
+                  << static_cast<cetl::string_view>(iface_params.udp_iface.value()) << "').\n";
+        return ExitCode::NodeCreationFailure;
+        ;
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
 
@@ -152,40 +155,26 @@ libcyphal::Expected<bool, int> run_application()
     get_info.software_version.minor   = VERSION_MINOR;
     get_info.software_vcs_revision_id = VCS_REVISION_ID;
     //
-    const cetl::string_view node_name{NODE_NAME};
-    get_info.name.resize(node_name.size());
-    (void) std::memmove(get_info.name.data(), node_name.data(), get_info.name.size());
+    get_info.name.resize(node_params.description.value().size());
+    (void) std::memmove(get_info.name.data(), node_params.description.value().data(), get_info.name.size());
+    //
+    application.getUniqueId(get_info.unique_id);
 
-    // 5. Bring up registry provider, and expose several registers.
+    // 5. Bring up registry provider.
     //
     if (const auto failure = node.makeRegistryProvider(application.registry()))
     {
-        std::cerr << "Failed to create registry provider.\n";
-        return 11;
+        std::cerr << "❌ Failed to create registry provider.\n";
+        return ExitCode::RegistryCreationFailure;
     }
-    // Expose `get_info.name` as mutable node description.
-    auto reg_node_desc = application.registry().route(  //
-        "uavcan.node.description",
-        [&memory, &get_info] {
-            //
-            return makeStringValue(memory, libcyphal::application::registry::makeStringView(get_info.name));
-        },
-        [&get_info](const auto& value) {
-            //
-            if (const auto* const str = value.get_string_if())
-            {
-                get_info.name = str->value;
-            }
-            return cetl::nullopt;
-        });
 
-    // 5. Bring up the command execution provider.
+    // 6. Bring up the command execution provider.
     //
     auto maybe_exec_cmd_provider = AppExecCmdProvider::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
     {
-        std::cerr << "Failed to create exec cmd provider.\n";
-        return 12;
+        std::cerr << "❌ Failed to create exec cmd provider.\n";
+        return ExitCode::ExecCmdProviderCreationFailure;
     }
     auto exec_cmd_provider = cetl::get<AppExecCmdProvider>(std::move(maybe_exec_cmd_provider));
 
@@ -207,7 +196,7 @@ libcyphal::Expected<bool, int> run_application()
         (void) executor.pollAwaitableResourcesFor(cetl::make_optional(timeout));
     }
     //
-    std::cout << "Done.\n-----------\nRun Stats:\n";
+    std::cout << "🏁 Done.\n-----------\nRun Stats:\n";
     std::cout << "  worst_callback_lateness=" << worst_lateness.count() << "us\n";
 
     return !exec_cmd_provider.should_power_off();
@@ -218,20 +207,19 @@ libcyphal::Expected<bool, int> run_application()
 int main(const int, char* const argv[])
 {
     const auto result = run_application();
-    if (const auto* const err = cetl::get_if<int>(&result))
+    if (const auto* const err = cetl::get_if<ExitCode>(&result))
     {
-        return *err;
+        return static_cast<int>(*err);
     }
 
+    // Should we restart?
     if (cetl::get<bool>(result))
     {
-        std::cout.flush();
-        std::cerr << "\nRESTART\n";
-        return -::execve(argv[0], argv, ::environ);  // NOLINT
+        (void) ::execve(argv[0], argv, ::environ);  // NOLINT
+        return static_cast<int>(ExitCode::RestartFailure);
     }
 
-    std::cerr << "\nPOWER OFF\n";
-    return 0;
+    return static_cast<int>(ExitCode::Success);
 }
 
 // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, readability-magic-numbers)
