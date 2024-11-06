@@ -34,7 +34,7 @@ class Application final
 public:
     // Defines max length of various strings.
     static constexpr std::size_t MaxIfaceLen = 64;
-    static constexpr std::size_t MacNodeDesc = 50;
+    static constexpr std::size_t MaxNodeDesc = 50;
 
     struct Regs
     {
@@ -167,7 +167,7 @@ public:
 
         // clang-format off
         StringParam<MaxIfaceLen>     can_iface_ { "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
-        StringParam<MacNodeDesc>     node_desc_ { "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
+        StringParam<MaxNodeDesc>     node_desc_ { "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
         Natural16Param<1>            node_id_   { "uavcan.node.id",           registry_,  {65535U},       {true}};
         StringParam<MaxIfaceLen>     udp_iface_ { "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
         // clang-format on
@@ -183,7 +183,7 @@ public:
     struct NodeParams
     {
         Regs::Natural16Param<1>&        id;
-        Regs::StringParam<MacNodeDesc>& description;
+        Regs::StringParam<MaxNodeDesc>& description;
     };
 
     Application();
