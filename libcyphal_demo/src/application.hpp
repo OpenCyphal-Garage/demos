@@ -38,6 +38,11 @@ public:
 
     struct Regs
     {
+        using Value = libcyphal::application::registry::IRegister::Value;
+
+        template <std::size_t Footprint>
+        using Register = libcyphal::application::registry::Register<Footprint>;
+
         /// Defines the footprint size of the type-erased register.
         /// The Footprint size is passed to internal unbounded variant
         /// which in turn should be big enough to store any register implementation.
@@ -82,11 +87,8 @@ public:
             }
 
         private:
-            CETL_NODISCARD libcyphal::application::registry::IRegister::Value makeStringValue(
-                const cetl::string_view sv) const
+            CETL_NODISCARD Value makeStringValue(const cetl::string_view sv) const
             {
-                using Value = libcyphal::application::registry::IRegister::Value;
-
                 const Value::allocator_type allocator{&memory_};
                 Value                       value{allocator};
                 auto&                       str = value.set_string();
@@ -94,9 +96,9 @@ public:
                 return value;
             }
 
-            platform::String<N>                                           value_;
-            cetl::pmr::memory_resource&                                   memory_;
-            libcyphal::application::registry::Register<RegisterFootprint> register_;
+            platform::String<N>         value_;
+            cetl::pmr::memory_resource& memory_;
+            Register<RegisterFootprint> register_;
 
         };  // StringParam
 
@@ -138,10 +140,8 @@ public:
             }
 
         private:
-            CETL_NODISCARD libcyphal::application::registry::IRegister::Value makeNatural16Value() const
+            CETL_NODISCARD Value makeNatural16Value() const
             {
-                using Value = libcyphal::application::registry::IRegister::Value;
-
                 const Value::allocator_type allocator{&memory_};
                 Value                       value{allocator};
                 auto&                       uint16s = value.set_natural16();
@@ -149,27 +149,33 @@ public:
                 return value;
             }
 
-            std::array<std::uint16_t, N>                                  value_;
-            cetl::pmr::memory_resource&                                   memory_;
-            libcyphal::application::registry::Register<RegisterFootprint> register_;
+            std::array<std::uint16_t, N> value_;
+            cetl::pmr::memory_resource&  memory_;
+            Register<RegisterFootprint>  register_;
 
         };  // Natural16Param
 
-        explicit Regs(libcyphal::application::registry::Registry& registry)
-            : registry_{registry}
+        Regs(platform::O1HeapMemoryResource& o1_heap_mr, libcyphal::application::registry::Registry& registry)
+            : o1_heap_mr_{o1_heap_mr}
+            , registry_{registry}
+            , sys_info_mem_{registry.route("sys.info.mem", [this] { return getSysInfoMem(); })}
         {
         }
 
     private:
         friend class Application;
 
+        Value getSysInfoMem() const;
+
+        platform::O1HeapMemoryResource&             o1_heap_mr_;
         libcyphal::application::registry::Registry& registry_;
 
         // clang-format off
-        StringParam<MaxIfaceLen>     can_iface_ { "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
-        StringParam<MaxNodeDesc>     node_desc_ { "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
-        Natural16Param<1>            node_id_   { "uavcan.node.id",           registry_,  {65535U},       {true}};
-        StringParam<MaxIfaceLen>     udp_iface_ { "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        StringParam<MaxIfaceLen>    can_iface_   {  "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
+        StringParam<MaxNodeDesc>    node_desc_   {  "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
+        Natural16Param<1>           node_id_     {  "uavcan.node.id",           registry_,  {65535U},       {true}};
+        StringParam<MaxIfaceLen>    udp_iface_   {  "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        Register<RegisterFootprint> sys_info_mem_;
         // clang-format on
 
     };  // Regs

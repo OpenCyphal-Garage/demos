@@ -34,7 +34,7 @@ Application::Application()
     : o1_heap_mr_{s_heap_arena}
     , storage_{"/tmp/" NODE_NAME}
     , registry_{o1_heap_mr_}
-    , regs_{registry_}
+    , regs_{o1_heap_mr_, registry_}
 {
     cetl::pmr::set_default_resource(&o1_heap_mr_);
 
@@ -77,14 +77,12 @@ Application::~Application()
 ///
 void Application::getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out)
 {
-    using unique_id = uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id;
-
     const auto result = storage_.get(".unique_id", out);
     if (cetl::get_if<libcyphal::platform::storage::Error>(&result) != nullptr)
     {
         std::random_device                          rd;           // Seed for the random number engine
-        std::mt19937                                gen(rd());    // Mersenne Twister engine
-        std::uniform_int_distribution<std::uint8_t> dis(0, 255);  // Distribution range for bytes
+        std::mt19937                                gen{rd()};    // Mersenne Twister engine
+        std::uniform_int_distribution<std::uint8_t> dis{0, 255};  // Distribution range for bytes
 
         // Populate the default; it is only used at the first run.
         for (auto& b : out)
@@ -94,4 +92,20 @@ void Application::getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::Typ
 
         (void) storage_.put(".unique_id", out);
     }
+}
+
+Application::Regs::Value Application::Regs::getSysInfoMem() const
+{
+    Value value{{&o1_heap_mr_}};
+    auto& uint64s = value.set_natural64();
+
+    const auto diagnostics = o1_heap_mr_.queryDiagnostics();
+    uint64s.value.reserve(5);  // five fields gonna push
+    uint64s.value.push_back(diagnostics.capacity);
+    uint64s.value.push_back(diagnostics.allocated);
+    uint64s.value.push_back(diagnostics.peak_allocated);
+    uint64s.value.push_back(diagnostics.peak_request_size);
+    uint64s.value.push_back(diagnostics.oom_count);
+
+    return value;
 }
