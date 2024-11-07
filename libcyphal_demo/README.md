@@ -15,7 +15,12 @@ This document will walk you through the process of building, running, and evalua
 on a GNU/Linux-based OS.
 It can be easily ported to another platform, such as a baremetal MCU,
 by replacing the POSIX socket API and stdio with suitable alternatives;
-for details, please consult with `udp.h` and `storage.h`. **FIXME**
+for details, please consult with:
+- `platform/posix/udp/*` files regarding UDP transport
+- `platform/linux/can/*` files regarding CAN transport
+- `platform/linux/epoll_single_threaded_executor.hpp` file regarding the executor
+- `platform/storage.hpp` file regarding the non-volatile storage
+- `platform/o1_heap_memory_resource.hpp` file regarding the memory resource
 
 ## Preparation
 

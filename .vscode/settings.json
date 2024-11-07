@@ -1,8 +1,11 @@
 {
     "cSpell.words": [
         "baremetal",
+        "cetl",
         "Cyphal",
-        "POSIX"
+        "libcyphal",
+        "POSIX",
+        "uavcan"
     ],
     "cmake.sourceDirectory": "/home/sergei/Develop/git/OpenCyphal-Garage/demos/libcyphal_demo"
 }

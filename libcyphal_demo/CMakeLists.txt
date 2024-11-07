@@ -11,6 +11,16 @@ project(libcyphal_demo
         HOMEPAGE_URL https://github.com/OpenCyphal-Garage/libcyphal)
 
 set(CMAKE_CXX_STANDARD "14" CACHE STRING "C++ standard to use when compiling.")
+set(DISABLE_CPP_EXCEPTIONS ON CACHE STRING "Disable C++ exceptions.")
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (DISABLE_CPP_EXCEPTIONS)
+        message(STATUS "DISABLE_CPP_EXCEPTIONS is true. Adding -fno-exceptions to compiler flags.")
+        list(APPEND CXX_FLAG_SET "-fno-exceptions")
+    endif()
+endif()
+
+add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAG_SET}>")
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")

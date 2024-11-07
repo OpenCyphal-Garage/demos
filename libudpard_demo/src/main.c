@@ -1330,7 +1330,7 @@ int main(const int argc, char* const argv[])
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_fragment, 88, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
     MEMORY_BLOCK_ALLOCATOR_DEFINE(mem_payload, 2048, RESOURCE_LIMIT_PAYLOAD_FRAGMENTS);
 
-    // Set up the dog application object.
+    // Set up the god application object.
     struct Application app = {
         .memory =
             {

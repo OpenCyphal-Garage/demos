@@ -2,9 +2,13 @@ name: build
 
 on:
   push:
-    branches: [ "sshirokov/libcyphal" ]
+    branches:
+      - main
+      - 'issue/*'
   pull_request:
-    branches: [ "sshirokov/libcyphal" ]
+    branches:
+      - main
+      - 'issue/*'
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -25,7 +29,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@23b84f76d4fc0e75595efc02fde30140e3cef2fb
+          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
