@@ -7,7 +7,9 @@
 #include "udp.h"
 
 /// Enable SO_REUSEPORT.
-#define _DEFAULT_SOURCE  // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+#ifndef _DEFAULT_SOURCE
+#    define _DEFAULT_SOURCE  // NOLINT(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+#endif
 
 #include <fcntl.h>
 #include <arpa/inet.h>

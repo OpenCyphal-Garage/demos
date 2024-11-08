@@ -71,11 +71,12 @@ include_directories(SYSTEM ${submodules}/libcanard/libcanard)
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 include_directories(SYSTEM ${submodules}/o1heap/o1heap/)
 
+include(${CMAKE_SOURCE_DIR}/../shared/register/register.cmake)
+include(${CMAKE_SOURCE_DIR}/../shared/socketcan/socketcan.cmake)
+
 # Build the application.
 add_executable(udral_servo_demo
         src/main.c
-        src/register.c
-        src/socketcan.c
 )
 add_dependencies(udral_servo_demo dsdl_uavcan dsdl_reg)
-target_link_libraries(udral_servo_demo canard o1heap)
+target_link_libraries(udral_servo_demo canard o1heap shared_register shared_socketcan)

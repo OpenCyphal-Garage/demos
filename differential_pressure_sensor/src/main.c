@@ -186,7 +186,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
     if (!anonymous && (state->port_id.pub.differential_pressure <= CANARD_SUBJECT_ID_MAX))
     {
         uavcan_si_unit_pressure_Scalar_1_0 msg = {0};
-        msg.pascal                             = (float) rand() * 0.1F;  // TODO: sample data from the real sensor.
+        msg._pascal                            = (float) rand() * 0.1F;  // TODO: sample data from the real sensor.
         // Serialize and publish the message:
         uint8_t      serialized[uavcan_si_unit_pressure_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
         size_t       serialized_size = sizeof(serialized);

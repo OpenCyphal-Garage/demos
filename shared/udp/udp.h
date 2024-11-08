@@ -1,7 +1,24 @@
-// This software is distributed under the terms of the MIT License.
-// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-// Copyright Amazon.com Inc. or its affiliates.
-// SPDX-License-Identifier: MIT
+///                            ____                   ______            __          __
+///                           / __ `____  ___  ____  / ____/_  ______  / /_  ____  / /
+///                          / / / / __ `/ _ `/ __ `/ /   / / / / __ `/ __ `/ __ `/ /
+///                         / /_/ / /_/ /  __/ / / / /___/ /_/ / /_/ / / / / /_/ / /
+///                         `____/ .___/`___/_/ /_/`____/`__, / .___/_/ /_/`__,_/_/
+///                             /_/                     /____/_/
+///
+/// This module implements the platform-specific implementation of the UDP transport. On a conventional POSIX system
+/// this would be a thin wrapper around the standard Berkeley sockets API. On a bare-metal system this would be
+/// a thin wrapper around the platform-specific network stack, such as LwIP, or a custom solution.
+///
+/// Having the interface extracted like this helps better illustrate the surface of the networking API required
+/// by LibUDPard, which is minimal. This also helps with porting to new platforms.
+///
+/// All addresses and values used in this API are in the host-native byte order.
+/// For example, 127.0.0.1 is represented as 0x7F000001 always.
+///
+/// This software is distributed under the terms of the MIT License.
+/// Copyright (C) OpenCyphal Development Team  <opencyphal.org>
+/// Copyright Amazon.com Inc. or its affiliates.
+/// SPDX-License-Identifier: MIT
 /// Author: Pavel Kirienko <pavel@opencyphal.org>
 
 #pragma once

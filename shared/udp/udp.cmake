@@ -8,9 +8,7 @@ cmake_minimum_required(VERSION 3.20)
 
 # Define the demo application build target and link it with the library.
 add_library(
-        platform
-        ${CMAKE_SOURCE_DIR}/src/platform/posix/udp/udp.c
-        ${CMAKE_SOURCE_DIR}/src/platform/linux/can/socketcan.c
+        shared_udp
+        ${CMAKE_CURRENT_LIST_DIR}/udp.c
 )
-target_link_libraries(platform PUBLIC canard)
-target_include_directories(platform PRIVATE ${CMAKE_SOURCE_DIR}/src/platform)
+target_include_directories(shared_udp PUBLIC ${CMAKE_CURRENT_LIST_DIR})
