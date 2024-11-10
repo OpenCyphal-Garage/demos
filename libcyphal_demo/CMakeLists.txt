@@ -96,4 +96,7 @@ target_include_directories(canard INTERFACE SYSTEM ${submodules}/libcanard/libca
 add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
 target_include_directories(o1heap INTERFACE SYSTEM ${submodules}/o1heap/o1heap)
 
+include(${CMAKE_SOURCE_DIR}/../shared/socketcan/socketcan.cmake)
+include(${CMAKE_SOURCE_DIR}/../shared/udp/udp.cmake)
+
 add_subdirectory(src)
