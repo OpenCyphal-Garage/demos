@@ -365,8 +365,8 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         fillServers(state->canard.rx_subscriptions[CanardTransferKindRequest], &m.servers);
         fillServers(state->canard.rx_subscriptions[CanardTransferKindResponse], &m.clients);  // For regularity.
 
-        // Serialize and publish the message. Use a small buffer because we know that our message is always small.
-        uint8_t serialized[512] = {0};  // https://github.com/OpenCyphal/nunavut/issues/191
+        // Serialize and publish the message.
+        uint8_t serialized[uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
         size_t  serialized_size = uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_;
         if (uavcan_node_port_List_0_1_serialize_(&m, &serialized[0], &serialized_size) >= 0)
         {
