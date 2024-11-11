@@ -77,7 +77,6 @@ jobs:
 
 
   build_udral_servo:
-    if: false
     name: Build UDRAL Servo demo
     runs-on: ubuntu-latest
 
