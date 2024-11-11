@@ -17,8 +17,6 @@
 #include <libcyphal/application/registry/registry_impl.hpp>
 #include <libcyphal/platform/storage.hpp>
 
-#include <uavcan/node/GetInfo_1_0.hpp>
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -227,7 +225,8 @@ public:
 
     /// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
     ///
-    void getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out);
+    using UniqueId = std::array<std::uint8_t, 16>;
+    UniqueId getUniqueId();
 
 private:
     // MARK: Data members:

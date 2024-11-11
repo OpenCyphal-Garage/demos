@@ -150,15 +150,12 @@ libcyphal::Expected<bool, ExitCode> run_application()
     //
     // The hardware version is not populated in this demo because it runs on no specific hardware.
     // An embedded node would usually determine the version by querying the hardware.
-    auto& get_info                    = node.getInfoProvider().response();
-    get_info.software_version.major   = VERSION_MAJOR;
-    get_info.software_version.minor   = VERSION_MINOR;
-    get_info.software_vcs_revision_id = VCS_REVISION_ID;
-    //
-    get_info.name.resize(node_params.description.value().size());
-    (void) std::memmove(get_info.name.data(), node_params.description.value().data(), get_info.name.size());
-    //
-    application.getUniqueId(get_info.unique_id);
+    auto& get_info_prov = node.getInfoProvider();
+    get_info_prov  //
+        .setName(node_params.description.value())
+        .setSoftwareVersion(VERSION_MAJOR, VERSION_MINOR)
+        .setSoftwareVcsRevisionId(VCS_REVISION_ID)
+        .setUniqueId(application.getUniqueId());
 
     // 5. Bring up registry provider.
     //
