@@ -456,8 +456,8 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
                     (void) fprintf(stderr, "RPC dispatcher start failed: %i\n", rpc_start_res);
                 }
             }  // Otherwise, it's a response destined to another node, or it's a malformed message.
-        }      // Otherwise, the message is malformed.
-    }          // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
+        }  // Otherwise, the message is malformed.
+    }  // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
 }
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)
@@ -1254,7 +1254,7 @@ static void* regStore(struct Register* const self, void* const context)
     assert((self != NULL) && (context != NULL));
     if (self->persistent && self->remote_mutable)
     {
-        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
+        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
         size_t     sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
         const bool ok      = (uavcan_register_Value_1_0_serialize_(&self->value, serialized, &sr_size) >= 0) &&
                         storagePut(self->name, sr_size, &serialized[0]);
