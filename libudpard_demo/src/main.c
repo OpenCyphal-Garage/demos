@@ -1254,7 +1254,7 @@ static void* regStore(struct Register* const self, void* const context)
     assert((self != NULL) && (context != NULL));
     if (self->persistent && self->remote_mutable)
     {
-        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+        byte_t     serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
         size_t     sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
         const bool ok      = (uavcan_register_Value_1_0_serialize_(&self->value, serialized, &sr_size) >= 0) &&
                         storagePut(self->name, sr_size, &serialized[0]);
