@@ -29,7 +29,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@047deb4a1b6344d3a54e759449ef02b233c63b3d
+          pip install git+https://github.com/OpenCyphal/nunavut.git@213315954e7a95b0d967a15926458f21adba2f61
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
@@ -48,7 +48,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@047deb4a1b6344d3a54e759449ef02b233c63b3d
+          pip install git+https://github.com/OpenCyphal/nunavut.git@213315954e7a95b0d967a15926458f21adba2f61
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libudpard_demo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
@@ -67,7 +67,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@047deb4a1b6344d3a54e759449ef02b233c63b3d
+          pip install git+https://github.com/OpenCyphal/nunavut.git@213315954e7a95b0d967a15926458f21adba2f61
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/differential_pressure_sensor/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/differential_pressure_sensor
@@ -87,7 +87,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@047deb4a1b6344d3a54e759449ef02b233c63b3d
+          pip install git+https://github.com/OpenCyphal/nunavut.git@213315954e7a95b0d967a15926458f21adba2f61
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/udral_servo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/udral_servo
