@@ -12,8 +12,6 @@
 #include <cetl/pf17/cetlpf.hpp>
 #include <o1heap.h>
 
-#include <uavcan/node/GetInfo_1_0.hpp>
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -75,9 +73,11 @@ Application::~Application()
 
 /// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
 ///
-void Application::getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::TypeOf::unique_id& out)
+Application::UniqueId Application::getUniqueId()
 {
-    const auto result = storage_.get(".unique_id", out);
+    UniqueId out_unique_id = {};
+
+    const auto result = storage_.get(".unique_id", out_unique_id);
     if (cetl::get_if<libcyphal::platform::storage::Error>(&result) != nullptr)
     {
         std::random_device                          rd;           // Seed for the random number engine
@@ -85,13 +85,15 @@ void Application::getUniqueId(uavcan::node::GetInfo::Response_1_0::_traits_::Typ
         std::uniform_int_distribution<std::uint8_t> dis{0, 255};  // Distribution range for bytes
 
         // Populate the default; it is only used at the first run.
-        for (auto& b : out)
+        for (auto& b : out_unique_id)
         {
             b = dis(gen);
         }
 
-        (void) storage_.put(".unique_id", out);
+        (void) storage_.put(".unique_id", out_unique_id);
     }
+
+    return out_unique_id;
 }
 
 Application::Regs::Value Application::Regs::getSysInfoMem() const
