@@ -16,4 +16,4 @@
 [submodule "submodules/libcyphal"]
 	path = submodules/libcyphal
 	url = https://github.com/OpenCyphal-Garage/libcyphal.git
-	branch = sshirokov/type_name
+	branch = sshirokov/async_destroy
