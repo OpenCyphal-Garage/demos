@@ -35,7 +35,7 @@ void registerRead(const char* const register_name, uavcan_register_Value_1_0* co
     FILE* const fp            = registerOpen(&register_name[0], false);
     if (fp != NULL)
     {
-        uint8_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
+        uint8_t serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
         size_t  sr_size = fread(&serialized[0], 1U, uavcan_register_Value_1_0_EXTENT_BYTES_, fp);
         (void) fclose(fp);
         uavcan_register_Value_1_0 out = {0};
@@ -54,9 +54,9 @@ void registerRead(const char* const register_name, uavcan_register_Value_1_0* co
 
 void registerWrite(const char* const register_name, const uavcan_register_Value_1_0* const value)
 {
-    uint8_t      serialized[uavcan_register_Value_1_0_EXTENT_BYTES_] = {0};
-    size_t       sr_size                                             = uavcan_register_Value_1_0_EXTENT_BYTES_;
-    const int8_t err = uavcan_register_Value_1_0_serialize_(value, serialized, &sr_size);
+    uint8_t      serialized[uavcan_register_Value_1_0_EXTENT_BYTES_];
+    size_t       sr_size = uavcan_register_Value_1_0_EXTENT_BYTES_;
+    const int8_t err     = uavcan_register_Value_1_0_serialize_(value, serialized, &sr_size);
     if (err >= 0)
     {
         FILE* const fp = registerOpen(&register_name[0], true);

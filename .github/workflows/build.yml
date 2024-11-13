@@ -48,7 +48,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install nunavut
+          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libudpard_demo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
@@ -57,7 +57,6 @@ jobs:
         run: cmake --build ${{github.workspace}}/libudpard_demo/build --config ${{env.BUILD_TYPE}}
 
   build_differential_pressure_sensor:
-    if: false
     name: Build Differential Pressure Sensor demo
     runs-on: ubuntu-latest
 
@@ -68,7 +67,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install nunavut
+          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/differential_pressure_sensor/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/differential_pressure_sensor
@@ -78,7 +77,6 @@ jobs:
 
 
   build_udral_servo:
-    if: false
     name: Build UDRAL Servo demo
     runs-on: ubuntu-latest
 
@@ -89,7 +87,7 @@ jobs:
 
       - name: get nunavut
         run: >
-          pip install nunavut
+          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/udral_servo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/udral_servo

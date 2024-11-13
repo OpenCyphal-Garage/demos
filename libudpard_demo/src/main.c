@@ -456,8 +456,8 @@ static void cbOnNodeIDAllocationData(struct Subscriber* const self, struct Udpar
                     (void) fprintf(stderr, "RPC dispatcher start failed: %i\n", rpc_start_res);
                 }
             }  // Otherwise, it's a response destined to another node, or it's a malformed message.
-        }      // Otherwise, the message is malformed.
-    }          // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
+        }  // Otherwise, the message is malformed.
+    }  // Otherwise, it's a request from another allocation client node, or we already have a node-ID.
 }
 
 static void cbOnMyData(struct Subscriber* const self, struct UdpardRxTransfer* const transfer)

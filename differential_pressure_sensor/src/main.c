@@ -188,7 +188,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         uavcan_si_unit_pressure_Scalar_1_0 msg = {0};
         msg._pascal                            = (float) rand() * 0.1F;  // TODO: sample data from the real sensor.
         // Serialize and publish the message:
-        uint8_t      serialized[uavcan_si_unit_pressure_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t      serialized[uavcan_si_unit_pressure_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
         size_t       serialized_size = sizeof(serialized);
         const int8_t err = uavcan_si_unit_pressure_Scalar_1_0_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
@@ -226,8 +226,8 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
             heartbeat.health.value = uavcan_node_Health_1_0_NOMINAL;
         }
 
-        uint8_t      serialized[uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
-        size_t       serialized_size                                                        = sizeof(serialized);
+        uint8_t      serialized[uavcan_node_Heartbeat_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
+        size_t       serialized_size = sizeof(serialized);
         const int8_t err = uavcan_node_Heartbeat_1_0_serialize_(&heartbeat, &serialized[0], &serialized_size);
         assert(err >= 0);
         if (err >= 0)
@@ -259,7 +259,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
             msg.node_id.value                       = UINT16_MAX;
             getUniqueID(msg.unique_id);
-            uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_2_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+            uint8_t      serialized[uavcan_pnp_NodeIDAllocationData_2_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
             size_t       serialized_size = sizeof(serialized);
             const int8_t err = uavcan_pnp_NodeIDAllocationData_2_0_serialize_(&msg, &serialized[0], &serialized_size);
             assert(err >= 0);
@@ -287,7 +287,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         uavcan_si_unit_temperature_Scalar_1_0 msg = {0};
         msg.kelvin                                = (float) rand() * 0.01F;  // TODO: sample data from the real sensor.
         // Serialize and publish the message:
-        uint8_t      serialized[uavcan_si_unit_temperature_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+        uint8_t      serialized[uavcan_si_unit_temperature_Scalar_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
         size_t       serialized_size = sizeof(serialized);
         const int8_t err = uavcan_si_unit_temperature_Scalar_1_0_serialize_(&msg, &serialized[0], &serialized_size);
         assert(err >= 0);
@@ -365,8 +365,8 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         fillServers(state->canard.rx_subscriptions[CanardTransferKindRequest], &m.servers);
         fillServers(state->canard.rx_subscriptions[CanardTransferKindResponse], &m.clients);  // For regularity.
 
-        // Serialize and publish the message. Use a small buffer because we know that our message is always small.
-        uint8_t serialized[512] = {0};  // https://github.com/OpenCyphal/nunavut/issues/191
+        // Serialize and publish the message. Use a smaller buffer if you know that message is always small.
+        uint8_t serialized[uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
         size_t  serialized_size = uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_;
         if (uavcan_node_port_List_0_1_serialize_(&m, &serialized[0], &serialized_size) >= 0)
         {
@@ -544,7 +544,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         {
             // The request object is empty so we don't bother deserializing it. Just send the response.
             const uavcan_node_GetInfo_Response_1_0 resp = processRequestNodeGetInfo();
-            uint8_t      serialized[uavcan_node_GetInfo_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+            uint8_t      serialized[uavcan_node_GetInfo_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
             size_t       serialized_size = sizeof(serialized);
             const int8_t res = uavcan_node_GetInfo_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size);
             if (res >= 0)
@@ -567,7 +567,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
             if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
             {
                 const uavcan_register_Access_Response_1_0 resp = processRequestRegisterAccess(&req);
-                uint8_t serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                uint8_t serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
                 size_t  serialized_size = sizeof(serialized);
                 if (uavcan_register_Access_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
@@ -586,7 +586,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
             if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
             {
                 const uavcan_register_List_Response_1_0 resp = {.name = registerGetNameByIndex(req.index)};
-                uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
                 size_t  serialized_size = sizeof(serialized);
                 if (uavcan_register_List_Response_1_0_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
@@ -605,7 +605,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
             if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload, &size) >= 0)
             {
                 const uavcan_node_ExecuteCommand_Response_1_1 resp = processRequestExecuteCommand(&req);
-                uint8_t serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+                uint8_t serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
                 size_t  serialized_size = sizeof(serialized);
                 if (uavcan_node_ExecuteCommand_Response_1_1_serialize_(&resp, &serialized[0], &serialized_size) >= 0)
                 {
