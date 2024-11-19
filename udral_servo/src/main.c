@@ -789,16 +789,17 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
     }
 }
 
-static void* canardAllocate(CanardInstance* const ins, const size_t amount)
+static void* canardAllocate(void* const user_reference, const size_t amount)
 {
-    O1HeapInstance* const heap = ((State*) ins->user_reference)->heap;
+    O1HeapInstance* const heap = ((State*) user_reference)->heap;
     assert(o1heapDoInvariantsHold(heap));
     return o1heapAllocate(heap, amount);
 }
 
-static void canardFree(CanardInstance* const ins, void* const pointer)
+static void canardDeallocate(void* const user_reference, const size_t amount, void* const pointer)
 {
-    O1HeapInstance* const heap = ((State*) ins->user_reference)->heap;
+    (void) amount;
+    O1HeapInstance* const heap = ((State*) user_reference)->heap;
     o1heapFree(heap, pointer);
 }
 
@@ -820,9 +821,14 @@ int main(const int argc, char* const argv[])
     _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 20] = {0};
     state.heap                                                      = o1heapInit(heap_arena, sizeof(heap_arena));
     assert(NULL != state.heap);
+    struct CanardMemoryResource canard_memory = {
+        .user_reference = &state,
+        .deallocate     = canardDeallocate,
+        .allocate       = canardAllocate,
+    };
 
     // The libcanard instance requires the allocator for managing protocol states.
-    state.canard                = canardInit(&canardAllocate, &canardFree);
+    state.canard                = canardInit(canard_memory);
     state.canard.user_reference = &state;  // Make the state reachable from the canard instance.
 
     // Restore the node-ID from the corresponding standard register. Default to anonymous.
@@ -873,7 +879,8 @@ int main(const int argc, char* const argv[])
         {
             return -sock[ifidx];
         }
-        state.canard_tx_queues[ifidx] = canardTxInit(CAN_TX_QUEUE_CAPACITY, val.natural16.value.elements[0]);
+        state.canard_tx_queues[ifidx] =
+            canardTxInit(CAN_TX_QUEUE_CAPACITY, val.natural16.value.elements[0], canard_memory);
     }
 
     // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired. Specification here:
@@ -1061,7 +1068,8 @@ int main(const int argc, char* const argv[])
                         return -result;  // SocketCAN interface failure (link down?)
                     }
                 }
-                state.canard.memory_free(&state.canard, canardTxPop(que, tqi));
+                CanardTxQueueItem* const mut_tqi = canardTxPop(que, tqi);
+                que->memory.deallocate(que->memory.user_reference, mut_tqi->allocated_size, mut_tqi);
                 tqi = canardTxPeek(que);
             }
 
@@ -1088,7 +1096,9 @@ int main(const int argc, char* const argv[])
             if (canard_result > 0)
             {
                 processReceivedTransfer(&state, &transfer);
-                state.canard.memory_free(&state.canard, (void*) transfer.payload);
+                state.canard.memory.deallocate(state.canard.memory.user_reference,
+                                               transfer.allocated_size,
+                                               transfer.payload);
             }
             else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
             {
