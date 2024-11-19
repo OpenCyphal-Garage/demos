@@ -230,6 +230,11 @@ private:
         return registerAwaitableCallback(std::move(function), ReadableTrigger{socket_can_rx_fd_});
     }
 
+    cetl::pmr::memory_resource& getTxMemoryResource() override
+    {
+        return memory_;
+    }
+
     // MARK: Data members:
 
     cetl::pmr::memory_resource& memory_;
