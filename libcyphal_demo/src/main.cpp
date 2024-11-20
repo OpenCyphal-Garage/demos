@@ -105,16 +105,16 @@ libcyphal::Expected<bool, ExitCode> run_application()
     std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
 
     Application application;
-    auto&       memory   = application.memory();
-    auto&       executor = application.executor();
+    auto&       general_mr = application.general_memory();
+    auto&       executor   = application.executor();
 
     auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
 
     // 1. Create the transport layer object. First try CAN, then UDP.
     //
-    TransportBagCan transport_bag_can{memory, executor};
-    TransportBagUdp transport_bag_udp{memory, executor};
+    TransportBagCan transport_bag_can{general_mr, executor};
+    TransportBagUdp transport_bag_udp{general_mr, executor};
     //
     libcyphal::transport::ITransport* transport_iface = transport_bag_can.create(iface_params);
     if (transport_iface == nullptr)
@@ -132,7 +132,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
 
     // 2. Create the presentation layer object.
     //
-    libcyphal::presentation::Presentation presentation{memory, executor, *transport_iface};
+    libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
 
     // 3. Create the node object with name.
     //
