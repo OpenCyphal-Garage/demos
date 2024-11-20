@@ -22,10 +22,12 @@
 ///
 struct TransportBagCan final
 {
-    TransportBagCan(cetl::pmr::memory_resource& general_mr, libcyphal::IExecutor& executor)
+    TransportBagCan(cetl::pmr::memory_resource& general_mr,
+                    libcyphal::IExecutor&       executor,
+                    cetl::pmr::memory_resource& block_mr)
         : general_mr_{general_mr}
         , executor_{executor}
-        , media_collection_{general_mr, executor, general_mr}
+        , media_collection_{general_mr, executor, block_mr}
     {
     }
 

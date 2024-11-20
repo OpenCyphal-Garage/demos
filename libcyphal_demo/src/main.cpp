@@ -105,16 +105,17 @@ libcyphal::Expected<bool, ExitCode> run_application()
     std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
 
     Application application;
-    auto&       general_mr = application.general_memory();
-    auto&       executor   = application.executor();
+    auto&       executor       = application.executor();
+    auto&       general_mr     = application.general_memory();
+    auto&       media_block_mr = application.media_block_memory();
 
     auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
 
     // 1. Create the transport layer object. First try CAN, then UDP.
     //
-    TransportBagCan transport_bag_can{general_mr, executor};
-    TransportBagUdp transport_bag_udp{general_mr, executor};
+    TransportBagCan transport_bag_can{general_mr, executor, media_block_mr};
+    TransportBagUdp transport_bag_udp{general_mr, executor, media_block_mr};
     //
     libcyphal::transport::ITransport* transport_iface = transport_bag_can.create(iface_params);
     if (transport_iface == nullptr)
@@ -126,15 +127,20 @@ libcyphal::Expected<bool, ExitCode> run_application()
         std::cerr << "❌ Failed to create any transport.\n";
         return ExitCode::TransportCreationFailure;
     }
+
+    // 2. Allocate block memory for media of the transport layer.
+    //
+    std::array<cetl::byte, 2U * 1024U> block_memory_blob;  // NOLINT
+    media_block_mr.setup(block_memory_blob.size(), block_memory_blob.data(), 256U);
+
+    // 3. Create the presentation layer object.
+    //
     (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
     std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
     std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
-
-    // 2. Create the presentation layer object.
-    //
     libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
 
-    // 3. Create the node object with name.
+    // 4. Create the node object with name.
     //
     auto maybe_node = libcyphal::application::Node::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
@@ -146,7 +152,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
 
-    // 4. Populate the node info.
+    // 5. Populate the node info.
     //
     // The hardware version is not populated in this demo because it runs on no specific hardware.
     // An embedded node would usually determine the version by querying the hardware.
@@ -157,7 +163,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
         .setSoftwareVcsRevisionId(VCS_REVISION_ID)
         .setUniqueId(application.getUniqueId());
 
-    // 5. Bring up registry provider.
+    // 6. Bring up registry provider.
     //
     if (const auto failure = node.makeRegistryProvider(application.registry()))
     {
@@ -165,7 +171,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
         return ExitCode::RegistryCreationFailure;
     }
 
-    // 6. Bring up the command execution provider.
+    // 7. Bring up the command execution provider.
     //
     auto maybe_exec_cmd_provider = AppExecCmdProvider::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))

@@ -22,10 +22,12 @@
 ///
 struct TransportBagUdp final
 {
-    TransportBagUdp(cetl::pmr::memory_resource& general_memory, libcyphal::IExecutor& executor)
+    TransportBagUdp(cetl::pmr::memory_resource& general_memory,
+                    libcyphal::IExecutor&       executor,
+                    cetl::pmr::memory_resource& block_mr)
         : general_mr_{general_memory}
         , executor_{executor}
-        , media_collection_{general_memory, executor, general_memory}
+        , media_collection_{general_memory, executor, block_mr}
     {
     }
 

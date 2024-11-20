@@ -13,6 +13,8 @@ project(libcyphal_demo
 set(CMAKE_CXX_STANDARD "14" CACHE STRING "C++ standard to use when compiling.")
 set(DISABLE_CPP_EXCEPTIONS ON CACHE STRING "Disable C++ exceptions.")
 
+option(CETL_ENABLE_DEBUG_ASSERT "Enable or disable runtime CETL asserts." ON)
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (DISABLE_CPP_EXCEPTIONS)
         message(STATUS "DISABLE_CPP_EXCEPTIONS is true. Adding -fno-exceptions to compiler flags.")
@@ -21,6 +23,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GN
 endif()
 
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAG_SET}>")
+
+if (CETL_ENABLE_DEBUG_ASSERT)
+    add_compile_definitions("CETL_ENABLE_DEBUG_ASSERT=1")
+endif()
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
