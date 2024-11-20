@@ -162,6 +162,17 @@ libcyphal::Expected<bool, ExitCode> run_application()
         .setSoftwareVersion(VERSION_MAJOR, VERSION_MINOR)
         .setSoftwareVcsRevisionId(VCS_REVISION_ID)
         .setUniqueId(application.getUniqueId());
+    //
+    // Update node's health according to states of memory resources.
+    node.heartbeatProducer().setUpdateCallback([&](const auto& arg) {
+        //
+        const auto gen_diag = general_mr.queryDiagnostics();
+        const auto blk_diag = media_block_mr.queryDiagnostics();
+        if ((gen_diag.oom_count > 0) || (blk_diag.oom_count > 0))
+        {
+            arg.message.health.value = uavcan::node::Health_1_0::CAUTION;
+        }
+    });
 
     // 6. Bring up registry provider.
     //

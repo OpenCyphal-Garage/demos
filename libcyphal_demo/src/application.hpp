@@ -216,7 +216,7 @@ public:
         return executor_;
     }
 
-    CETL_NODISCARD cetl::pmr::memory_resource& general_memory() noexcept
+    CETL_NODISCARD platform::O1HeapMemoryResource& general_memory() noexcept
     {
         return o1_heap_mr_;
     }
