@@ -153,15 +153,15 @@ static void send(State* const                        state,
                  const CanardMicrosecond             tx_deadline_usec,
                  const CanardTransferMetadata* const metadata,
                  const size_t                        payload_size,
-                 const void* const                   payload)
+                 const void* const                   payload_data)
 {
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
+        const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
         (void) canardTxPush(&state->canard_tx_queues[ifidx],
                             &state->canard,
                             tx_deadline_usec,
                             metadata,
-                            payload_size,
                             payload);
     }
 }
@@ -170,11 +170,11 @@ static void sendResponse(State* const                        state,
                          const CanardMicrosecond             tx_deadline_usec,
                          const CanardTransferMetadata* const request_metadata,
                          const size_t                        payload_size,
-                         const void* const                   payload)
+                         const void* const                   payload_data)
 {
     CanardTransferMetadata meta = *request_metadata;
     meta.transfer_kind          = CanardTransferKindResponse;
-    send(state, tx_deadline_usec, &meta, payload_size, payload);
+    send(state, tx_deadline_usec, &meta, payload_size, payload_data);
 }
 
 /// Invoked at the rate of the fastest loop.
@@ -524,11 +524,11 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
 {
     if (transfer->metadata.transfer_kind == CanardTransferKindMessage)
     {
-        size_t size = transfer->payload_size;
+        size_t size = transfer->payload.size;
         if (transfer->metadata.port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
         {
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
-            if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload, &size) >= 0)
+            if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload.data, &size) >= 0)
             {
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
@@ -563,8 +563,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_register_Access_1_0_FIXED_PORT_ID_)
         {
             uavcan_register_Access_Request_1_0 req  = {0};
-            size_t                             size = transfer->payload_size;
-            if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                             size = transfer->payload.size;
+            if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_register_Access_Response_1_0 resp = processRequestRegisterAccess(&req);
                 uint8_t serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -582,8 +582,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_register_List_1_0_FIXED_PORT_ID_)
         {
             uavcan_register_List_Request_1_0 req  = {0};
-            size_t                           size = transfer->payload_size;
-            if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                           size = transfer->payload.size;
+            if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_register_List_Response_1_0 resp = {.name = registerGetNameByIndex(req.index)};
                 uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -601,8 +601,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_)
         {
             uavcan_node_ExecuteCommand_Request_1_1 req  = {0};
-            size_t                                 size = transfer->payload_size;
-            if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                                 size = transfer->payload.size;
+            if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_node_ExecuteCommand_Response_1_1 resp = processRequestExecuteCommand(&req);
                 uint8_t serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -887,8 +887,8 @@ int main(const int argc, char* const argv[])
             {
                 processReceivedTransfer(&state, &transfer);
                 state.canard.memory.deallocate(state.canard.memory.user_reference,
-                                               transfer.allocated_size,
-                                               transfer.payload);
+                                               transfer.payload.allocated_size,
+                                               transfer.payload.data);
             }
             else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
             {
