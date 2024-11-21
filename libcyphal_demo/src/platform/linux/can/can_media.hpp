@@ -217,7 +217,7 @@ private:
             return cetl::nullopt;
         }
 
-        return PopResult::Metadata{executor_.now(), canard_frame.extended_can_id, canard_frame.payload_size};
+        return PopResult::Metadata{executor_.now(), canard_frame.extended_can_id, canard_frame.payload.size};
     }
 
     CETL_NODISCARD libcyphal::IExecutor::Callback::Any registerPushCallback(
