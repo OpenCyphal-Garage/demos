@@ -158,11 +158,7 @@ static void send(State* const                        state,
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
         const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
-        (void) canardTxPush(&state->canard_tx_queues[ifidx],
-                            &state->canard,
-                            tx_deadline_usec,
-                            metadata,
-                            payload);
+        (void) canardTxPush(&state->canard_tx_queues[ifidx], &state->canard, tx_deadline_usec, metadata, payload);
     }
 }
 

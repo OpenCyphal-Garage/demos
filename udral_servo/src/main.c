@@ -196,11 +196,7 @@ static void send(State* const                        state,
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
         const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
-        (void) canardTxPush(&state->canard_tx_queues[ifidx],
-                            &state->canard,
-                            tx_deadline_usec,
-                            metadata,
-                            payload);
+        (void) canardTxPush(&state->canard_tx_queues[ifidx], &state->canard, tx_deadline_usec, metadata, payload);
     }
 }
 
@@ -689,7 +685,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         if (transfer->metadata.port_id == state->port_id.sub.servo_setpoint)
         {
             reg_udral_physics_dynamics_translation_Linear_0_1 msg = {0};
-            if (reg_udral_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload.data, &size) >= 0)
+            if (reg_udral_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload.data, &size) >=
+                0)
             {
                 processMessageServoSetpoint(state, &msg);
             }
