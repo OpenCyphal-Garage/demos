@@ -157,7 +157,7 @@ static void send(State* const                        state,
 {
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
-        const struct CanardPayload payload = {.data = payload_data, .size = payload_size};
+        const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
         (void) canardTxPush(&state->canard_tx_queues[ifidx], &state->canard, tx_deadline_usec, metadata, payload);
     }
 }
@@ -166,11 +166,11 @@ static void sendResponse(State* const                        state,
                          const CanardMicrosecond             tx_deadline_usec,
                          const CanardTransferMetadata* const request_metadata,
                          const size_t                        payload_size,
-                         const void* const                   payload)
+                         const void* const                   payload_data)
 {
     CanardTransferMetadata meta = *request_metadata;
     meta.transfer_kind          = CanardTransferKindResponse;
-    send(state, tx_deadline_usec, &meta, payload_size, payload);
+    send(state, tx_deadline_usec, &meta, payload_size, payload_data);
 }
 
 /// Invoked at the rate of the fastest loop.
