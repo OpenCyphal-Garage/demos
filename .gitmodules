@@ -17,4 +17,4 @@
 [submodule "submodules/libcyphal"]
 	path = submodules/libcyphal
 	url = https://github.com/OpenCyphal-Garage/libcyphal.git
-	branch = sshirokov/352_zero_copy
+	branch = issue/352_zero_copy
