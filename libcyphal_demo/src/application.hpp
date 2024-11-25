@@ -7,6 +7,7 @@
 #ifndef APPLICATION_HPP
 #define APPLICATION_HPP
 
+#include "platform/block_memory_resource.hpp"
 #include "platform/linux/epoll_single_threaded_executor.hpp"
 #include "platform/o1_heap_memory_resource.hpp"
 #include "platform/storage.hpp"
@@ -33,6 +34,11 @@ public:
     // Defines max length of various strings.
     static constexpr std::size_t MaxIfaceLen = 64;
     static constexpr std::size_t MaxNodeDesc = 50;
+
+    // Defines maximum alignment requirement for media block memory resource.
+    // Currently, it's `std::max_align_t` but could be as small as 1-byte for raw bytes fragments.
+    static constexpr std::size_t MediaBlockMaxAlign = alignof(std::max_align_t);
+    using MediaMemoryResource                       = platform::BlockMemoryResource<MediaBlockMaxAlign>;
 
     struct Regs
     {
@@ -153,27 +159,34 @@ public:
 
         };  // Natural16Param
 
-        Regs(platform::O1HeapMemoryResource& o1_heap_mr, libcyphal::application::registry::Registry& registry)
+        Regs(platform::O1HeapMemoryResource&             o1_heap_mr,
+             libcyphal::application::registry::Registry& registry,
+             MediaMemoryResource&                        media_block_mr)
             : o1_heap_mr_{o1_heap_mr}
             , registry_{registry}
-            , sys_info_mem_{registry.route("sys.info.mem", [this] { return getSysInfoMem(); })}
+            , media_block_mr_{media_block_mr}
+            , sys_info_mem_block_{registry.route("sys.info.mem.blk", [this] { return getSysInfoMemBlock(); })}
+            , sys_info_mem_general_{registry.route("sys.info.mem.gen", [this] { return getSysInfoMemGeneral(); })}
         {
         }
 
     private:
         friend class Application;
 
-        Value getSysInfoMem() const;
+        Value getSysInfoMemBlock() const;
+        Value getSysInfoMemGeneral() const;
 
         platform::O1HeapMemoryResource&             o1_heap_mr_;
         libcyphal::application::registry::Registry& registry_;
+        MediaMemoryResource&                        media_block_mr_;
 
         // clang-format off
         StringParam<MaxIfaceLen>    can_iface_   {  "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
         StringParam<MaxNodeDesc>    node_desc_   {  "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
         Natural16Param<1>           node_id_     {  "uavcan.node.id",           registry_,  {65535U},       {true}};
         StringParam<MaxIfaceLen>    udp_iface_   {  "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
-        Register<RegisterFootprint> sys_info_mem_;
+        Register<RegisterFootprint> sys_info_mem_block_;
+        Register<RegisterFootprint> sys_info_mem_general_;
         // clang-format on
 
     };  // Regs
@@ -203,9 +216,14 @@ public:
         return executor_;
     }
 
-    CETL_NODISCARD cetl::pmr::memory_resource& memory() noexcept
+    CETL_NODISCARD platform::O1HeapMemoryResource& general_memory() noexcept
     {
         return o1_heap_mr_;
+    }
+
+    CETL_NODISCARD MediaMemoryResource& media_block_memory() noexcept
+    {
+        return media_block_mr_;
     }
 
     CETL_NODISCARD libcyphal::application::registry::Registry& registry() noexcept
@@ -225,7 +243,7 @@ public:
 
     /// Returns the 128-bit unique-ID of the local node. This value is used in `uavcan.node.GetInfo.Response`.
     ///
-    using UniqueId = std::array<std::uint8_t, 16>;
+    using UniqueId = std::array<std::uint8_t, 16>;  // NOLINT
     UniqueId getUniqueId();
 
 private:
@@ -233,6 +251,7 @@ private:
 
     platform::Linux::EpollSingleThreadedExecutor executor_;
     platform::O1HeapMemoryResource               o1_heap_mr_;
+    MediaMemoryResource                          media_block_mr_;
     platform::storage::KeyValue                  storage_;
     libcyphal::application::registry::Registry   registry_;
     Regs                                         regs_;

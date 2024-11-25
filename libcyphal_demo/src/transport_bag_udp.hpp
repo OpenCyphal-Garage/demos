@@ -22,10 +22,12 @@
 ///
 struct TransportBagUdp final
 {
-    TransportBagUdp(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor)
-        : memory_{memory}
+    TransportBagUdp(cetl::pmr::memory_resource& general_memory,
+                    libcyphal::IExecutor&       executor,
+                    cetl::pmr::memory_resource& block_mr)
+        : general_mr_{general_memory}
         , executor_{executor}
-        , media_collection_{memory, executor}
+        , media_collection_{general_memory, executor, block_mr}
     {
     }
 
@@ -37,7 +39,7 @@ struct TransportBagUdp final
         }
 
         media_collection_.parse(params.udp_iface.value());
-        auto maybe_udp_transport = makeTransport({memory_}, executor_, media_collection_.span(), TxQueueCapacity);
+        auto maybe_udp_transport = makeTransport({general_mr_}, executor_, media_collection_.span(), TxQueueCapacity);
         if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_udp_transport))
         {
             std::cerr << "❌ Failed to create UDP transport (iface='"
@@ -57,7 +59,7 @@ struct TransportBagUdp final
 private:
     static constexpr std::size_t TxQueueCapacity = 16;
 
-    cetl::pmr::memory_resource&                                    memory_;
+    cetl::pmr::memory_resource&                                    general_mr_;
     libcyphal::IExecutor&                                          executor_;
     platform::posix::UdpMediaCollection                            media_collection_;
     libcyphal::UniquePtr<libcyphal::transport::udp::IUdpTransport> transport_;

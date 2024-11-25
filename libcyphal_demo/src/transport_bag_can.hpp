@@ -22,10 +22,12 @@
 ///
 struct TransportBagCan final
 {
-    TransportBagCan(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor)
-        : memory_{memory}
+    TransportBagCan(cetl::pmr::memory_resource& general_mr,
+                    libcyphal::IExecutor&       executor,
+                    cetl::pmr::memory_resource& block_mr)
+        : general_mr_{general_mr}
         , executor_{executor}
-        , media_collection_{memory, executor}
+        , media_collection_{general_mr, executor, block_mr}
     {
     }
 
@@ -37,7 +39,7 @@ struct TransportBagCan final
         }
 
         media_collection_.parse(params.can_iface.value());
-        auto maybe_can_transport = makeTransport({memory_}, executor_, media_collection_.span(), TxQueueCapacity);
+        auto maybe_can_transport = makeTransport({general_mr_}, executor_, media_collection_.span(), TxQueueCapacity);
         if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_can_transport))
         {
             std::cerr << "❌ Failed to create CAN transport (iface='"
@@ -57,7 +59,7 @@ struct TransportBagCan final
 private:
     static constexpr std::size_t TxQueueCapacity = 16;
 
-    cetl::pmr::memory_resource&                                    memory_;
+    cetl::pmr::memory_resource&                                    general_mr_;
     libcyphal::IExecutor&                                          executor_;
     platform::Linux::CanMediaCollection                            media_collection_;
     libcyphal::UniquePtr<libcyphal::transport::can::ICanTransport> transport_;

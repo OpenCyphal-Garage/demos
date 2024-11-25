@@ -191,27 +191,23 @@ static void send(State* const                        state,
                  const CanardMicrosecond             tx_deadline_usec,
                  const CanardTransferMetadata* const metadata,
                  const size_t                        payload_size,
-                 const void* const                   payload)
+                 const void* const                   payload_data)
 {
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
-        (void) canardTxPush(&state->canard_tx_queues[ifidx],
-                            &state->canard,
-                            tx_deadline_usec,
-                            metadata,
-                            payload_size,
-                            payload);
+        const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
+        (void) canardTxPush(&state->canard_tx_queues[ifidx], &state->canard, tx_deadline_usec, metadata, payload);
     }
 }
 
 static void sendResponse(State* const                  state,
                          const CanardRxTransfer* const original_request_transfer,
                          const size_t                  payload_size,
-                         const void* const             payload)
+                         const void* const             payload_data)
 {
     CanardTransferMetadata meta = original_request_transfer->metadata;
     meta.transfer_kind          = CanardTransferKindResponse;
-    send(state, original_request_transfer->timestamp_usec + MEGA, &meta, payload_size, payload);
+    send(state, original_request_transfer->timestamp_usec + MEGA, &meta, payload_size, payload_data);
 }
 
 /// Invoked at the rate of the fastest loop.
@@ -685,11 +681,12 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
 {
     if (transfer->metadata.transfer_kind == CanardTransferKindMessage)
     {
-        size_t size = transfer->payload_size;
+        size_t size = transfer->payload.size;
         if (transfer->metadata.port_id == state->port_id.sub.servo_setpoint)
         {
             reg_udral_physics_dynamics_translation_Linear_0_1 msg = {0};
-            if (reg_udral_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            if (reg_udral_physics_dynamics_translation_Linear_0_1_deserialize_(&msg, transfer->payload.data, &size) >=
+                0)
             {
                 processMessageServoSetpoint(state, &msg);
             }
@@ -697,7 +694,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == state->port_id.sub.servo_readiness)
         {
             reg_udral_service_common_Readiness_0_1 msg = {0};
-            if (reg_udral_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload, &size) >= 0)
+            if (reg_udral_service_common_Readiness_0_1_deserialize_(&msg, transfer->payload.data, &size) >= 0)
             {
                 processMessageServiceReadiness(state, &msg, transfer->timestamp_usec);
             }
@@ -705,7 +702,7 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_)
         {
             uavcan_pnp_NodeIDAllocationData_2_0 msg = {0};
-            if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload, &size) >= 0)
+            if (uavcan_pnp_NodeIDAllocationData_2_0_deserialize_(&msg, transfer->payload.data, &size) >= 0)
             {
                 processMessagePlugAndPlayNodeIDAllocation(state, &msg);
             }
@@ -736,8 +733,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_register_Access_1_0_FIXED_PORT_ID_)
         {
             uavcan_register_Access_Request_1_0 req  = {0};
-            size_t                             size = transfer->payload_size;
-            if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                             size = transfer->payload.size;
+            if (uavcan_register_Access_Request_1_0_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_register_Access_Response_1_0 resp = processRequestRegisterAccess(&req);
                 uint8_t serialized[uavcan_register_Access_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -751,8 +748,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_register_List_1_0_FIXED_PORT_ID_)
         {
             uavcan_register_List_Request_1_0 req  = {0};
-            size_t                           size = transfer->payload_size;
-            if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                           size = transfer->payload.size;
+            if (uavcan_register_List_Request_1_0_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_register_List_Response_1_0 resp = {.name = registerGetNameByIndex(req.index)};
                 uint8_t serialized[uavcan_register_List_Response_1_0_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -766,8 +763,8 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
         else if (transfer->metadata.port_id == uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_)
         {
             uavcan_node_ExecuteCommand_Request_1_1 req  = {0};
-            size_t                                 size = transfer->payload_size;
-            if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload, &size) >= 0)
+            size_t                                 size = transfer->payload.size;
+            if (uavcan_node_ExecuteCommand_Request_1_1_deserialize_(&req, transfer->payload.data, &size) >= 0)
             {
                 const uavcan_node_ExecuteCommand_Response_1_1 resp = processRequestExecuteCommand(&req);
                 uint8_t serialized[uavcan_node_ExecuteCommand_Response_1_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
@@ -789,16 +786,17 @@ static void processReceivedTransfer(State* const state, const CanardRxTransfer* 
     }
 }
 
-static void* canardAllocate(CanardInstance* const ins, const size_t amount)
+static void* canardAllocate(void* const user_reference, const size_t amount)
 {
-    O1HeapInstance* const heap = ((State*) ins->user_reference)->heap;
+    O1HeapInstance* const heap = ((State*) user_reference)->heap;
     assert(o1heapDoInvariantsHold(heap));
     return o1heapAllocate(heap, amount);
 }
 
-static void canardFree(CanardInstance* const ins, void* const pointer)
+static void canardDeallocate(void* const user_reference, const size_t amount, void* const pointer)
 {
-    O1HeapInstance* const heap = ((State*) ins->user_reference)->heap;
+    (void) amount;
+    O1HeapInstance* const heap = ((State*) user_reference)->heap;
     o1heapFree(heap, pointer);
 }
 
@@ -820,9 +818,14 @@ int main(const int argc, char* const argv[])
     _Alignas(O1HEAP_ALIGNMENT) static uint8_t heap_arena[1024 * 20] = {0};
     state.heap                                                      = o1heapInit(heap_arena, sizeof(heap_arena));
     assert(NULL != state.heap);
+    struct CanardMemoryResource canard_memory = {
+        .user_reference = &state,
+        .deallocate     = canardDeallocate,
+        .allocate       = canardAllocate,
+    };
 
     // The libcanard instance requires the allocator for managing protocol states.
-    state.canard                = canardInit(&canardAllocate, &canardFree);
+    state.canard                = canardInit(canard_memory);
     state.canard.user_reference = &state;  // Make the state reachable from the canard instance.
 
     // Restore the node-ID from the corresponding standard register. Default to anonymous.
@@ -873,7 +876,8 @@ int main(const int argc, char* const argv[])
         {
             return -sock[ifidx];
         }
-        state.canard_tx_queues[ifidx] = canardTxInit(CAN_TX_QUEUE_CAPACITY, val.natural16.value.elements[0]);
+        state.canard_tx_queues[ifidx] =
+            canardTxInit(CAN_TX_QUEUE_CAPACITY, val.natural16.value.elements[0], canard_memory);
     }
 
     // Load the port-IDs from the registers. You can implement hot-reloading at runtime if desired. Specification here:
@@ -1061,7 +1065,8 @@ int main(const int argc, char* const argv[])
                         return -result;  // SocketCAN interface failure (link down?)
                     }
                 }
-                state.canard.memory_free(&state.canard, canardTxPop(que, tqi));
+                CanardTxQueueItem* const mut_tqi = canardTxPop(que, tqi);
+                que->memory.deallocate(que->memory.user_reference, mut_tqi->allocated_size, mut_tqi);
                 tqi = canardTxPeek(que);
             }
 
@@ -1088,7 +1093,9 @@ int main(const int argc, char* const argv[])
             if (canard_result > 0)
             {
                 processReceivedTransfer(&state, &transfer);
-                state.canard.memory_free(&state.canard, (void*) transfer.payload);
+                state.canard.memory.deallocate(state.canard.memory.user_reference,
+                                               transfer.payload.allocated_size,
+                                               transfer.payload.data);
             }
             else if ((canard_result == 0) || (canard_result == -CANARD_ERROR_OUT_OF_MEMORY))
             {

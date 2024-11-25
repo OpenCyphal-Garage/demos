@@ -39,9 +39,10 @@ class CanMedia final : public libcyphal::transport::can::IMedia
 {
 public:
     CETL_NODISCARD static cetl::variant<CanMedia, libcyphal::transport::PlatformError> make(
-        cetl::pmr::memory_resource& memory,
+        cetl::pmr::memory_resource& general_mr,
         libcyphal::IExecutor&       executor,
-        const cetl::string_view     iface_address_sv)
+        const cetl::string_view     iface_address_sv,
+        cetl::pmr::memory_resource& tx_mr)
     {
         const IfaceAddrString iface_address{iface_address_sv};
 
@@ -62,7 +63,7 @@ public:
             return libcyphal::transport::PlatformError{posix::PosixPlatformError{error_code}};
         }
 
-        return CanMedia{memory, executor, socket_can_rx_fd, socket_can_tx_fd, iface_address};
+        return CanMedia{general_mr, executor, socket_can_rx_fd, socket_can_tx_fd, iface_address, tx_mr};
     }
 
     ~CanMedia()
@@ -81,11 +82,12 @@ public:
     CanMedia& operator=(const CanMedia&) = delete;
 
     CanMedia(CanMedia&& other) noexcept
-        : memory_{other.memory_}
+        : general_mr_{other.general_mr_}
         , executor_{other.executor_}
         , socket_can_rx_fd_{std::exchange(other.socket_can_rx_fd_, -1)}
         , socket_can_tx_fd_{std::exchange(other.socket_can_tx_fd_, -1)}
         , iface_address_{other.iface_address_}
+        , tx_mr_{other.tx_mr_}
     {
     }
     CanMedia* operator=(CanMedia&&) noexcept = delete;
@@ -126,16 +128,18 @@ private:
     template <typename T>
     using VarArray = cetl::VariableLengthArray<T, cetl::pmr::polymorphic_allocator<T>>;
 
-    CanMedia(cetl::pmr::memory_resource& memory,
+    CanMedia(cetl::pmr::memory_resource& general_mr,
              libcyphal::IExecutor&       executor,
              const SocketCANFD           socket_can_rx_fd,
              const SocketCANFD           socket_can_tx_fd,
-             const IfaceAddrString&      iface_address)
-        : memory_{memory}
+             const IfaceAddrString&      iface_address,
+             cetl::pmr::memory_resource& tx_mr)
+        : general_mr_{general_mr}
         , executor_{executor}
         , socket_can_rx_fd_{socket_can_rx_fd}
         , socket_can_tx_fd_{socket_can_tx_fd}
         , iface_address_{iface_address}
+        , tx_mr_{tx_mr}
     {
     }
 
@@ -161,7 +165,7 @@ private:
 
     cetl::optional<libcyphal::transport::MediaFailure> setFilters(const Filters filters) noexcept override
     {
-        const cetl::pmr::polymorphic_allocator<CanardFilter> alloc{&memory_};
+        const cetl::pmr::polymorphic_allocator<CanardFilter> alloc{&general_mr_};
         VarArray<CanardFilter>                               can_filters{alloc};
         can_filters.reserve(filters.size());
         std::transform(filters.begin(), filters.end(), std::back_inserter(can_filters), [](const Filter filter) {
@@ -213,7 +217,7 @@ private:
             return cetl::nullopt;
         }
 
-        return PopResult::Metadata{executor_.now(), canard_frame.extended_can_id, canard_frame.payload_size};
+        return PopResult::Metadata{executor_.now(), canard_frame.extended_can_id, canard_frame.payload.size};
     }
 
     CETL_NODISCARD libcyphal::IExecutor::Callback::Any registerPushCallback(
@@ -230,13 +234,19 @@ private:
         return registerAwaitableCallback(std::move(function), ReadableTrigger{socket_can_rx_fd_});
     }
 
+    cetl::pmr::memory_resource& getTxMemoryResource() override
+    {
+        return tx_mr_;
+    }
+
     // MARK: Data members:
 
-    cetl::pmr::memory_resource& memory_;
+    cetl::pmr::memory_resource& general_mr_;
     libcyphal::IExecutor&       executor_;
     SocketCANFD                 socket_can_rx_fd_;
     SocketCANFD                 socket_can_tx_fd_;
     IfaceAddrString             iface_address_;
+    cetl::pmr::memory_resource& tx_mr_;
 
 };  // CanMedia
 
@@ -244,10 +254,13 @@ private:
 
 struct CanMediaCollection
 {
-    CanMediaCollection(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor)
-        : memory_{memory}
+    CanMediaCollection(cetl::pmr::memory_resource& general_mr,
+                       libcyphal::IExecutor&       executor,
+                       cetl::pmr::memory_resource& tx_mr)
+        : general_mr_{general_mr}
         , executor_{executor}
         , media_array_{{cetl::nullopt, cetl::nullopt, cetl::nullopt}}
+        , tx_mr_{tx_mr}
     {
     }
 
@@ -270,7 +283,7 @@ struct CanMediaCollection
             const auto iface_address = iface_addresses.substr(curr, next - curr);
             if (!iface_address.empty())
             {
-                auto maybe_media = CanMedia::make(memory_, executor_, iface_address);
+                auto maybe_media = CanMedia::make(general_mr_, executor_, iface_address, tx_mr_);
                 if (auto* const media_ptr = cetl::get_if<CanMedia>(&maybe_media))
                 {
                     media_array_[index].emplace(std::move(*media_ptr));     // NOLINT
@@ -291,10 +304,11 @@ struct CanMediaCollection
 private:
     static constexpr std::size_t MaxCanMedia = 3;
 
-    cetl::pmr::memory_resource&                                 memory_;
+    cetl::pmr::memory_resource&                                 general_mr_;
     libcyphal::IExecutor&                                       executor_;
     std::array<cetl::optional<CanMedia>, MaxCanMedia>           media_array_;
     std::array<libcyphal::transport::can::IMedia*, MaxCanMedia> media_ifaces_{};
+    cetl::pmr::memory_resource&                                 tx_mr_;
 
 };  // CanMediaCollection
 

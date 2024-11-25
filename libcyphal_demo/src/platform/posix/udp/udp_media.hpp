@@ -26,10 +26,14 @@ namespace posix
 class UdpMedia final : public libcyphal::transport::udp::IMedia
 {
 public:
-    UdpMedia(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor, const cetl::string_view iface_address)
-        : memory_{memory}
+    UdpMedia(cetl::pmr::memory_resource& general_mr,
+             libcyphal::IExecutor&       executor,
+             const cetl::string_view     iface_address,
+             cetl::pmr::memory_resource& tx_mr)
+        : general_mr_{general_mr}
         , executor_{executor}
         , iface_address_{iface_address}
+        , tx_mr_{tx_mr}
     {
     }
 
@@ -40,9 +44,10 @@ public:
     UdpMedia* operator=(UdpMedia&&) noexcept = delete;
 
     UdpMedia(UdpMedia&& other) noexcept
-        : memory_{other.memory_}
+        : general_mr_{other.general_mr_}
         , executor_{other.executor_}
         , iface_address_{other.iface_address_}
+        , tx_mr_{other.tx_mr_}
     {
     }
 
@@ -56,19 +61,25 @@ private:
 
     MakeTxSocketResult::Type makeTxSocket() override
     {
-        return UdpTxSocket::make(memory_, executor_, iface_address_.data());
+        return UdpTxSocket::make(general_mr_, executor_, iface_address_.data());
     }
 
     MakeRxSocketResult::Type makeRxSocket(const libcyphal::transport::udp::IpEndpoint& multicast_endpoint) override
     {
-        return UdpRxSocket::make(memory_, executor_, iface_address_.data(), multicast_endpoint);
+        return UdpRxSocket::make(general_mr_, executor_, iface_address_.data(), multicast_endpoint);
+    }
+
+    cetl::pmr::memory_resource& getTxMemoryResource() override
+    {
+        return tx_mr_;
     }
 
     // MARK: Data members:
 
-    cetl::pmr::memory_resource& memory_;
+    cetl::pmr::memory_resource& general_mr_;
     libcyphal::IExecutor&       executor_;
     String<64>                  iface_address_;
+    cetl::pmr::memory_resource& tx_mr_;
 
 };  // UdpMedia
 
@@ -76,8 +87,13 @@ private:
 
 struct UdpMediaCollection
 {
-    UdpMediaCollection(cetl::pmr::memory_resource& memory, libcyphal::IExecutor& executor)
-        : media_array_{{{memory, executor, ""}, {memory, executor, ""}, {memory, executor, ""}}}
+    UdpMediaCollection(cetl::pmr::memory_resource& general_mr,
+                       libcyphal::IExecutor&       executor,
+                       cetl::pmr::memory_resource& tx_mr)
+        : media_array_{{//
+                        {general_mr, executor, "", tx_mr},
+                        {general_mr, executor, "", tx_mr},
+                        {general_mr, executor, "", tx_mr}}}
     {
     }
 

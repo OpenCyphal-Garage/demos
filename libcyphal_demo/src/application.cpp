@@ -32,7 +32,7 @@ Application::Application()
     : o1_heap_mr_{s_heap_arena}
     , storage_{"/tmp/" NODE_NAME}
     , registry_{o1_heap_mr_}
-    , regs_{o1_heap_mr_, registry_}
+    , regs_{o1_heap_mr_, registry_, media_block_mr_}
 {
     cetl::pmr::set_default_resource(&o1_heap_mr_);
 
@@ -60,13 +60,21 @@ Application::~Application()
 {
     save(storage_, registry_);
 
-    const auto mr_diag = o1_heap_mr_.queryDiagnostics();
+    const auto o1_diag = o1_heap_mr_.queryDiagnostics();
     std::cout << "O(1) Heap diagnostics:" << "\n"
-              << "  capacity=" << mr_diag.capacity << "\n"
-              << "  allocated=" << mr_diag.allocated << "\n"
-              << "  peak_allocated=" << mr_diag.peak_allocated << "\n"
-              << "  peak_request_size=" << mr_diag.peak_request_size << "\n"
-              << "  oom_count=" << mr_diag.oom_count << "\n";
+              << "  capacity=" << o1_diag.capacity << "\n"
+              << "  allocated=" << o1_diag.allocated << "\n"
+              << "  peak_allocated=" << o1_diag.peak_allocated << "\n"
+              << "  peak_request_size=" << o1_diag.peak_request_size << "\n"
+              << "  oom_count=" << o1_diag.oom_count << "\n";
+
+    const auto blk_diag = media_block_mr_.queryDiagnostics();
+    std::cout << "Media block memory diagnostics:" << "\n"
+              << "  capacity=" << blk_diag.capacity << "\n"
+              << "  allocated=" << blk_diag.allocated << "\n"
+              << "  peak_allocated=" << blk_diag.peak_allocated << "\n"
+              << "  block_size=" << blk_diag.block_size << "\n"
+              << "  oom_count=" << blk_diag.oom_count << "\n";
 
     cetl::pmr::set_default_resource(cetl::pmr::new_delete_resource());
 }
@@ -96,13 +104,29 @@ Application::UniqueId Application::getUniqueId()
     return out_unique_id;
 }
 
-Application::Regs::Value Application::Regs::getSysInfoMem() const
+Application::Regs::Value Application::Regs::getSysInfoMemBlock() const
+{
+    Value value{{&o1_heap_mr_}};
+    auto& uint64s = value.set_natural64();
+
+    const auto diagnostics = media_block_mr_.queryDiagnostics();
+    uint64s.value.reserve(5);  // NOLINT five fields gonna push
+    uint64s.value.push_back(diagnostics.capacity);
+    uint64s.value.push_back(diagnostics.allocated);
+    uint64s.value.push_back(diagnostics.peak_allocated);
+    uint64s.value.push_back(diagnostics.block_size);
+    uint64s.value.push_back(diagnostics.oom_count);
+
+    return value;
+}
+
+Application::Regs::Value Application::Regs::getSysInfoMemGeneral() const
 {
     Value value{{&o1_heap_mr_}};
     auto& uint64s = value.set_natural64();
 
     const auto diagnostics = o1_heap_mr_.queryDiagnostics();
-    uint64s.value.reserve(5);  // five fields gonna push
+    uint64s.value.reserve(5);  // NOLINT five fields gonna push
     uint64s.value.push_back(diagnostics.capacity);
     uint64s.value.push_back(diagnostics.allocated);
     uint64s.value.push_back(diagnostics.peak_allocated);

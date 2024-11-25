@@ -1,6 +1,7 @@
 [submodule "submodules/libcanard"]
 	path = submodules/libcanard
 	url = https://github.com/UAVCAN/libcanard
+	branch = v4
 [submodule "submodules/public_regulated_data_types"]
 	path = submodules/public_regulated_data_types
 	url = https://github.com/UAVCAN/public_regulated_data_types
@@ -16,4 +17,4 @@
 [submodule "submodules/libcyphal"]
 	path = submodules/libcyphal
 	url = https://github.com/OpenCyphal-Garage/libcyphal.git
-	branch = sshirokov/async_destroy
+	branch = issue/352_zero_copy
