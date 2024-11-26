@@ -1055,7 +1055,10 @@ int main(const int argc, char* const argv[])
                 // Otherwise just drop it and move on to the next one.
                 if ((tqi->tx_deadline_usec == 0) || (tqi->tx_deadline_usec > monotonic_time))
                 {
-                    const int16_t result = socketcanPush(sock[ifidx], &tqi->frame, 0);  // Non-blocking write attempt.
+                    const CanardFrame canard_frame = {.extended_can_id = tqi->frame.extended_can_id,
+                                                      .payload         = {.size = tqi->frame.payload.size,
+                                                                          .data = tqi->frame.payload.data}};
+                    const int16_t result = socketcanPush(sock[ifidx], &canard_frame, 0);  // Non-blocking write attempt.
                     if (result == 0)
                     {
                         break;  // The queue is full, we will try again on the next iteration.
@@ -1065,8 +1068,10 @@ int main(const int argc, char* const argv[])
                         return -result;  // SocketCAN interface failure (link down?)
                     }
                 }
+
                 CanardTxQueueItem* const mut_tqi = canardTxPop(que, tqi);
-                que->memory.deallocate(que->memory.user_reference, mut_tqi->allocated_size, mut_tqi);
+                canardTxFree(que, &state.canard, mut_tqi);
+
                 tqi = canardTxPeek(que);
             }
 
