@@ -128,19 +128,14 @@ libcyphal::Expected<bool, ExitCode> run_application()
         return ExitCode::TransportCreationFailure;
     }
 
-    // 2. Allocate block memory for media of the transport layer.
-    //
-    std::array<cetl::byte, 2U * 1024U> block_memory_blob;  // NOLINT
-    media_block_mr.setup(block_memory_blob.size(), block_memory_blob.data(), 256U);
-
-    // 3. Create the presentation layer object.
+    // 2. Create the presentation layer object.
     //
     (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
     std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
     std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
     libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
 
-    // 4. Create the node object with name.
+    // 3. Create the node object with name.
     //
     auto maybe_node = libcyphal::application::Node::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
@@ -152,7 +147,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
     }
     auto node = cetl::get<libcyphal::application::Node>(std::move(maybe_node));
 
-    // 5. Populate the node info.
+    // 4. Populate the node info.
     //
     // The hardware version is not populated in this demo because it runs on no specific hardware.
     // An embedded node would usually determine the version by querying the hardware.
@@ -174,7 +169,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
         }
     });
 
-    // 6. Bring up registry provider.
+    // 5. Bring up registry provider.
     //
     if (const auto failure = node.makeRegistryProvider(application.registry()))
     {
@@ -182,7 +177,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
         return ExitCode::RegistryCreationFailure;
     }
 
-    // 7. Bring up the command execution provider.
+    // 6. Bring up the command execution provider.
     //
     auto maybe_exec_cmd_provider = AppExecCmdProvider::make(presentation);
     if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))

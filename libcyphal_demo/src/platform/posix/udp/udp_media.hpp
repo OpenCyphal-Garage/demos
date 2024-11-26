@@ -11,12 +11,14 @@
 #include "udp_sockets.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
+#include <cetl/pf20/cetlpf.hpp>
 #include <libcyphal/executor.hpp>
 #include <libcyphal/transport/udp/media.hpp>
 #include <libcyphal/transport/udp/tx_rx_sockets.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 
 namespace platform
 {
@@ -126,6 +128,14 @@ struct UdpMediaCollection
     cetl::span<libcyphal::transport::udp::IMedia*> span()
     {
         return {media_ifaces_.data(), media_ifaces_.size()};
+    }
+
+    std::size_t count() const
+    {
+        return std::count_if(media_ifaces_.cbegin(), media_ifaces_.cend(), [](const auto* iface) {
+            //
+            return iface != nullptr;
+        });
     }
 
 private:

@@ -23,6 +23,7 @@
 #include <libcyphal/types.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -307,6 +308,14 @@ struct CanMediaCollection
     cetl::span<libcyphal::transport::can::IMedia*> span()
     {
         return {media_ifaces_.data(), media_ifaces_.size()};
+    }
+
+    std::size_t count() const
+    {
+        return std::count_if(media_ifaces_.cbegin(), media_ifaces_.cend(), [](const auto* iface) {
+            //
+            return iface != nullptr;
+        });
     }
 
 private:
