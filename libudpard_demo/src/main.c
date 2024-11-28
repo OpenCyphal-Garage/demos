@@ -180,9 +180,13 @@ struct ApplicationRegisters
 /// fixed-size block pools instead.
 struct ApplicationMemory
 {
-    struct UdpardMemoryResource session;
-    struct UdpardMemoryResource fragment;
-    struct UdpardMemoryResource payload;
+    struct
+    {
+        struct UdpardMemoryResource session;
+        struct UdpardMemoryResource fragment;
+        struct UdpardMemoryResource payload;
+    } rx;
+    struct UdpardTxMemoryResources tx;
 };
 
 /// The god object.
@@ -887,10 +891,10 @@ static int16_t acceptDatagramForSubscription(const UdpardMicrosecond            
             sub->handler(sub, &transfer);
         }
         udpardRxFragmentFree(transfer.payload,  // Free the payload after the transfer is handled.
-                             memory->fragment,
+                             memory->rx.fragment,
                              (struct UdpardMemoryDeleter){
-                                 .user_reference = memory->payload.user_reference,
-                                 .deallocate     = memory->payload.deallocate,
+                                 .user_reference = memory->rx.payload.user_reference,
+                                 .deallocate     = memory->rx.payload.deallocate,
                              });
         break;
     }
@@ -937,10 +941,10 @@ static int16_t acceptDatagramForRPC(const UdpardMicrosecond               timest
         assert(server->handler != NULL);
         server->handler(server, &transfer, iface_count, tx);
         udpardRxFragmentFree(transfer.base.payload,  // Free the payload after the transfer is handled.
-                             memory->fragment,
+                             memory->rx.fragment,
                              (struct UdpardMemoryDeleter){
-                                 .user_reference = memory->payload.user_reference,
-                                 .deallocate     = memory->payload.deallocate,
+                                 .user_reference = memory->rx.payload.user_reference,
+                                 .deallocate     = memory->rx.payload.deallocate,
                              });
         break;
     }
@@ -1029,7 +1033,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         // A deeply embedded system may be able to transfer this memory directly from the NIC driver to eliminate copy.
         struct UdpardMutablePayload payload = {
             .size = RX_BUFFER_SIZE,
-            .data = app->memory.payload.allocate(app->memory.payload.user_reference, RX_BUFFER_SIZE),
+            .data = app->memory.rx.payload.allocate(app->memory.rx.payload.user_reference, RX_BUFFER_SIZE),
         };
         if (NULL == payload.data)
         {
@@ -1043,7 +1047,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
         {
             // We end up here if the socket was closed while processing another datagram.
             // This happens if a subscriber chose to unsubscribe dynamically.
-            app->memory.payload.deallocate(app->memory.payload.user_reference, RX_BUFFER_SIZE, payload.data);
+            app->memory.rx.payload.deallocate(app->memory.rx.payload.user_reference, RX_BUFFER_SIZE, payload.data);
             continue;
         }
         // Pass the data buffer into LibUDPard for further processing. It takes ownership of the buffer.
@@ -1074,7 +1078,7 @@ static void doIO(const UdpardMicrosecond unblock_deadline, struct Application* c
             }
             else  // The subscription was disabled while processing other socket reads. Ignore it.
             {
-                app->memory.payload.deallocate(app->memory.payload.user_reference, RX_BUFFER_SIZE, payload.data);
+                app->memory.rx.payload.deallocate(app->memory.rx.payload.user_reference, RX_BUFFER_SIZE, payload.data);
             }
         }
         else
@@ -1111,9 +1115,9 @@ static uavcan_register_Value_1_0 getRegisterSysInfoMem(struct Register* const se
     uavcan_register_Value_1_0 out = {0};
     uavcan_register_Value_1_0_select_natural64_(&out);
     uavcan_primitive_array_Natural64_1_0* const val   = &out.natural64;
-    const struct MemoryBlockAllocator*          mba[] = {mem->session.user_reference,
-                                                         mem->fragment.user_reference,
-                                                         mem->payload.user_reference};
+    const struct MemoryBlockAllocator*          mba[] = {mem->rx.session.user_reference,
+                                                         mem->rx.fragment.user_reference,
+                                                         mem->rx.payload.user_reference};
     for (size_t i = 0; i < (sizeof(mba) / sizeof(mba[0])); i++)
     {
         val->value.elements[val->value.count++] = mba[i]->block_count;
@@ -1332,18 +1336,27 @@ int main(const int argc, char* const argv[])
 
     // Set up the god application object.
     struct Application app = {
-        .memory =
-            {
-                .session  = {.user_reference = &mem_session,
-                             .allocate       = &memoryBlockAllocate,
-                             .deallocate     = &memoryBlockDeallocate},
-                .fragment = {.user_reference = &mem_fragment,
-                             .allocate       = &memoryBlockAllocate,
-                             .deallocate     = &memoryBlockDeallocate},
-                .payload  = {.user_reference = &mem_payload,
-                             .allocate       = &memoryBlockAllocate,
-                             .deallocate     = &memoryBlockDeallocate},
-            },
+        .memory        = {.rx =
+                              {
+                                  .session  = {.user_reference = &mem_session,
+                                               .allocate       = &memoryBlockAllocate,
+                                               .deallocate     = &memoryBlockDeallocate},
+                                  .fragment = {.user_reference = &mem_fragment,
+                                               .allocate       = &memoryBlockAllocate,
+                                               .deallocate     = &memoryBlockDeallocate},
+                                  .payload  = {.user_reference = &mem_payload,
+                                               .allocate       = &memoryBlockAllocate,
+                                               .deallocate     = &memoryBlockDeallocate},
+                       },
+                          .tx =
+                              {
+                                  .fragment = {.user_reference = &mem_fragment,
+                                               .allocate       = &memoryBlockAllocate,
+                                               .deallocate     = &memoryBlockDeallocate},
+                                  .payload  = {.user_reference = &mem_payload,
+                                               .allocate       = &memoryBlockAllocate,
+                                               .deallocate     = &memoryBlockDeallocate},
+                       }},
         .iface_count   = 0,
         .local_node_id = UDPARD_NODE_ID_UNSET,
     };
@@ -1380,7 +1393,7 @@ int main(const int argc, char* const argv[])
     // Initialize the TX pipelines. We have one per local iface (unlike the RX pipelines which are shared).
     for (size_t i = 0; i < app.iface_count; i++)
     {
-        if ((0 != udpardTxInit(&app.tx_pipeline[i].udpard_tx, &app.local_node_id, TX_QUEUE_SIZE, app.memory.payload)) ||
+        if ((0 != udpardTxInit(&app.tx_pipeline[i].udpard_tx, &app.local_node_id, TX_QUEUE_SIZE, app.memory.tx)) ||
             (0 != udpTxInit(&app.tx_pipeline[i].io, app.ifaces[i])))
         {
             (void) fprintf(stderr, "Failed to initialize TX pipeline for iface %zu\n", i);
@@ -1410,9 +1423,10 @@ int main(const int argc, char* const argv[])
 
     // Initialize the subscribers. They are not dependent on the local node-ID value.
     const struct UdpardRxMemoryResources rx_memory = {
-        .session  = app.memory.session,
-        .fragment = app.memory.fragment,
-        .payload  = {.user_reference = app.memory.payload.user_reference, .deallocate = app.memory.payload.deallocate},
+        .session  = app.memory.rx.session,
+        .fragment = app.memory.rx.fragment,
+        .payload  = {.user_reference = app.memory.rx.payload.user_reference,
+                     .deallocate     = app.memory.rx.payload.deallocate},
     };
     {
         const int16_t res = initSubscriber(&app.sub_pnp_node_id_allocation,
