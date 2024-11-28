@@ -12,8 +12,6 @@
 #include "platform/common_helpers.hpp"
 #include "platform/posix/udp/udp_media.hpp"
 
-#include <udpard.h>  // for `alignof(UdpardTxItem)`
-
 #include <cetl/pf17/cetlpf.hpp>
 #include <libcyphal/executor.hpp>
 #include <libcyphal/transport/errors.hpp>
@@ -61,11 +59,9 @@ struct TransportBagUdp final
         const std::size_t mtu = transport_->getProtocolParams().mtu_bytes;
         std::cout << "Iface MTU : " << mtu << "\n";
 
-        // Udpard still allocates memory for `TxItem`+payload, so there is alignment requirement.
-        // TODO: Relax this alignment down to 1 when it will be used for raw bytes block allocations only.
-        //       Delete also `#include <udpard.h>` above. Eliminate `mtu + sizeof(UdpardTxItem) + 8U` to be just `mtu`.
-        constexpr std::size_t block_alignment = alignof(UdpardTxItem);
-        const std::size_t     block_size      = mtu + sizeof(UdpardTxItem) + 8U;
+        // Udpard allocates memory for raw bytes block only, so there is no alignment requirement.
+        constexpr std::size_t block_alignment = 1;
+        const std::size_t     block_size      = mtu;
         const std::size_t     pool_size       = media_collection_.count() * TxQueueCapacity * block_size;
         media_block_mr_.setup(pool_size, block_size, block_alignment);
 
