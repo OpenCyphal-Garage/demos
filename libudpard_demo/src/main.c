@@ -832,8 +832,8 @@ static void transmitPendingFrames(const UdpardMicrosecond  time_usec,
 {
     for (size_t i = 0; i < iface_count; i++)
     {
-        struct TxPipeline* const   pipe = &tx_pipelines[i];
-        const struct UdpardTxItem* tqi  = udpardTxPeek(&pipe->udpard_tx);  // Find the highest-priority datagram.
+        struct TxPipeline* const pipe = &tx_pipelines[i];
+        struct UdpardTxItem*     tqi  = udpardTxPeek(&pipe->udpard_tx);  // Find the highest-priority datagram.
         while (tqi != NULL)
         {
             // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
