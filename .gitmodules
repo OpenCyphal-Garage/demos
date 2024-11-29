@@ -1,7 +1,7 @@
 [submodule "submodules/libcanard"]
 	path = submodules/libcanard
 	url = https://github.com/UAVCAN/libcanard
-	branch = sshirokov/v4_typedefs
+	branch = v4
 [submodule "submodules/public_regulated_data_types"]
 	path = submodules/public_regulated_data_types
 	url = https://github.com/UAVCAN/public_regulated_data_types
@@ -11,7 +11,7 @@
 [submodule "submodules/libudpard"]
 	path = submodules/libudpard
 	url = https://github.com/OpenCyphal/libudpard
-	branch = sshirokov/v2_single_tx_copy
+	branch = v2
 [submodule "submodules/cetl"]
 	path = submodules/cetl
 	url = https://github.com/OpenCyphal/CETL.git
