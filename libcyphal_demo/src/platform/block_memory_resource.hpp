@@ -9,18 +9,20 @@
 
 #include <cetl/cetl.hpp>
 #include <cetl/pf17/cetlpf.hpp>
+#include <cetl/pmr/memory.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 namespace platform
 {
 
 /// Implements a C++17 PMR memory resource that uses a pool of pre-allocated blocks.
 ///
-template <std::size_t MaxAlign = sizeof(std::max_align_t)>
-class BlockMemoryResource : public cetl::pmr::memory_resource
+class BlockMemoryResource final : public cetl::pmr::memory_resource
 {
 public:
     struct Diagnostics final
@@ -33,7 +35,11 @@ public:
 
     };  // Diagnostics
 
-    BlockMemoryResource()           = default;
+    explicit BlockMemoryResource(cetl::pmr::memory_resource& memory)
+        : pool_ptr_{nullptr, {&memory, 0U}}
+    {
+    }
+
     ~BlockMemoryResource() override = default;
 
     BlockMemoryResource(BlockMemoryResource&&)                 = delete;
@@ -41,17 +47,39 @@ public:
     BlockMemoryResource& operator=(BlockMemoryResource&&)      = delete;
     BlockMemoryResource& operator=(const BlockMemoryResource&) = delete;
 
-    void setup(const std::size_t pool_size_bytes, void* const pool, const std::size_t block_size_bytes)
+    /// Initializes the memory pool.
+    ///
+    /// Normally, such setup functionality of this method should be in the constructor.
+    /// However, we need to pass this block memory resource to a media first.
+    /// Then the media will be passed to the transport creation,
+    /// and only then we can set up this block memory resource according to MTU of the transport
+    /// and total number of redundant media. To break this dependency cycle,
+    /// we have to separate the setup of the block memory resource from its construction.
+    ///
+    void setup(const std::size_t pool_size, const std::size_t block_size, const std::size_t alignment)
     {
-        CETL_DEBUG_ASSERT(nullptr != pool, "");
-        CETL_DEBUG_ASSERT(block_size_bytes > 0U, "");
-        CETL_DEBUG_ASSERT(pool_size_bytes >= MaxAlign, "");
+        CETL_DEBUG_ASSERT(!pool_ptr_, "");
+        CETL_DEBUG_ASSERT(block_size > 0U, "");
+        CETL_DEBUG_ASSERT(pool_size >= alignment, "");
+        CETL_DEBUG_ASSERT(alignment && !(alignment & (alignment - 1)), "Should be a power of 2");
+
+        auto* const mr = pool_ptr_.get_deleter().resource();
+        pool_ptr_      = PoolPtr{mr->allocate(pool_size), {mr, pool_size}};
+        if (!pool_ptr_)
+        {
+            CETL_DEBUG_ASSERT(false, "Failed to allocate memory pool");
+            return;
+        }
+
+        // Internal implementation requires at least `alignof(void*)` alignment -
+        // b/c we link free blocks in the pool using pointers.
+        alignment_ = std::max(alignment, alignof(void*));
 
         // Enforce alignment and padding of the input arguments. We may waste some space as a result.
-        const std::size_t bs       = (block_size_bytes + MaxAlign - 1U) & ~(MaxAlign - 1U);
-        std::size_t       sz_bytes = pool_size_bytes;
-        auto*             ptr      = static_cast<std::uint8_t*>(pool);
-        while ((reinterpret_cast<std::uintptr_t>(ptr) % MaxAlign) != 0U)  // NOLINT
+        const std::size_t bs       = (block_size + alignment_ - 1U) & ~(alignment_ - 1U);
+        std::size_t       sz_bytes = pool_size;
+        auto*             ptr      = reinterpret_cast<std::uint8_t*>(pool_ptr_.get());  // NOLINT
+        while ((reinterpret_cast<std::uintptr_t>(ptr) % alignment_) != 0U)              // NOLINT
         {
             ptr++;  // NOLINT
             if (sz_bytes > 0U)
@@ -60,9 +88,9 @@ public:
             }
         }
 
-        block_size_bytes_ = bs;
-        block_count_      = sz_bytes / bs;
-        head_             = reinterpret_cast<void**>(ptr);  // NOLINT
+        block_size_  = bs;
+        block_count_ = sz_bytes / bs;
+        head_        = reinterpret_cast<void**>(ptr);  // NOLINT
 
         for (std::size_t i = 0U; i < block_count_; i++)
         {
@@ -73,7 +101,7 @@ public:
 
     Diagnostics queryDiagnostics() const noexcept
     {
-        return {block_count_, used_blocks_, used_blocks_peak_, block_size_bytes_, oom_count_};
+        return {block_count_, used_blocks_, used_blocks_peak_, block_size_, oom_count_};
     }
 
 protected:
@@ -81,7 +109,7 @@ protected:
 
     void* do_allocate(std::size_t size_bytes, std::size_t alignment) override  // NOLINT
     {
-        if (alignment > MaxAlign)
+        if (alignment > alignment_)
         {
 #if defined(__cpp_exceptions)
             throw std::bad_alloc();
@@ -100,7 +128,7 @@ protected:
 
         void* out = nullptr;
         request_count_++;
-        if (size_bytes <= block_size_bytes_)
+        if (size_bytes <= block_size_)
         {
             out = static_cast<void*>(head_);  // NOLINT
             if (head_ != nullptr)
@@ -120,7 +148,7 @@ protected:
     void do_deallocate(void* ptr, std::size_t size_bytes, std::size_t alignment) override  // NOLINT
     {
         CETL_DEBUG_ASSERT((nullptr != ptr) || (0U == size_bytes), "");
-        CETL_DEBUG_ASSERT(size_bytes <= block_size_bytes_, "");
+        CETL_DEBUG_ASSERT(size_bytes <= block_size_, "");
         (void) size_bytes;
         (void) alignment;
 
@@ -146,9 +174,13 @@ protected:
     }
 
 private:
+    using PoolPtr = std::unique_ptr<void, cetl::pmr::MemoryResourceDeleter<cetl::pmr::memory_resource>>;
+
+    PoolPtr     pool_ptr_;
+    std::size_t alignment_{0U};
     void**      head_{nullptr};
     std::size_t block_count_{0U};
-    std::size_t block_size_bytes_{0U};
+    std::size_t block_size_{0U};
     std::size_t used_blocks_{0U};
     std::size_t used_blocks_peak_{0U};
     std::size_t request_count_{0U};

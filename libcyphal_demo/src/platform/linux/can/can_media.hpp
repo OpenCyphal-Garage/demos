@@ -19,9 +19,11 @@
 #include <libcyphal/executor.hpp>
 #include <libcyphal/transport/can/media.hpp>
 #include <libcyphal/transport/errors.hpp>
+#include <libcyphal/transport/media_payload.hpp>
 #include <libcyphal/types.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -183,9 +185,10 @@ private:
 
     PushResult::Type push(const libcyphal::TimePoint /* deadline */,
                           const libcyphal::transport::can::CanId can_id,
-                          const cetl::span<const cetl::byte>     payload) noexcept override
+                          libcyphal::transport::MediaPayload&    payload) noexcept override
     {
-        const CanardFrame  canard_frame{can_id, payload.size(), payload.data()};
+        const CanardFrame  canard_frame{can_id,
+                                        {payload.getSpan().size(), static_cast<const void*>(payload.getSpan().data())}};
         const std::int16_t result = ::socketcanPush(socket_can_tx_fd_, &canard_frame, 0);
         if (result < 0)
         {
@@ -193,6 +196,12 @@ private:
         }
 
         const bool is_accepted = result > 0;
+        if (is_accepted)
+        {
+            // Payload is not needed anymore, so return memory asap.
+            payload.reset();
+        }
+
         return PushResult::Success{is_accepted};
     }
 
@@ -299,6 +308,14 @@ struct CanMediaCollection
     cetl::span<libcyphal::transport::can::IMedia*> span()
     {
         return {media_ifaces_.data(), media_ifaces_.size()};
+    }
+
+    std::size_t count() const
+    {
+        return std::count_if(media_ifaces_.cbegin(), media_ifaces_.cend(), [](const auto* iface) {
+            //
+            return iface != nullptr;
+        });
     }
 
 private:

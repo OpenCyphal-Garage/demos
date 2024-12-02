@@ -32,6 +32,7 @@ Application::Application()
     : o1_heap_mr_{s_heap_arena}
     , storage_{"/tmp/" NODE_NAME}
     , registry_{o1_heap_mr_}
+    , media_block_mr_{*cetl::pmr::new_delete_resource()}
     , regs_{o1_heap_mr_, registry_, media_block_mr_}
 {
     cetl::pmr::set_default_resource(&o1_heap_mr_);

@@ -35,11 +35,6 @@ public:
     static constexpr std::size_t MaxIfaceLen = 64;
     static constexpr std::size_t MaxNodeDesc = 50;
 
-    // Defines maximum alignment requirement for media block memory resource.
-    // Currently, it's `std::max_align_t` but could be as small as 1-byte for raw bytes fragments.
-    static constexpr std::size_t MediaBlockMaxAlign = alignof(std::max_align_t);
-    using MediaMemoryResource                       = platform::BlockMemoryResource<MediaBlockMaxAlign>;
-
     struct Regs
     {
         using Value = libcyphal::application::registry::IRegister::Value;
@@ -161,7 +156,7 @@ public:
 
         Regs(platform::O1HeapMemoryResource&             o1_heap_mr,
              libcyphal::application::registry::Registry& registry,
-             MediaMemoryResource&                        media_block_mr)
+             platform::BlockMemoryResource&              media_block_mr)
             : o1_heap_mr_{o1_heap_mr}
             , registry_{registry}
             , media_block_mr_{media_block_mr}
@@ -178,7 +173,7 @@ public:
 
         platform::O1HeapMemoryResource&             o1_heap_mr_;
         libcyphal::application::registry::Registry& registry_;
-        MediaMemoryResource&                        media_block_mr_;
+        platform::BlockMemoryResource&              media_block_mr_;
 
         // clang-format off
         StringParam<MaxIfaceLen>    can_iface_   {  "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
@@ -221,7 +216,7 @@ public:
         return o1_heap_mr_;
     }
 
-    CETL_NODISCARD MediaMemoryResource& media_block_memory() noexcept
+    CETL_NODISCARD platform::BlockMemoryResource& media_block_memory() noexcept
     {
         return media_block_mr_;
     }
@@ -251,7 +246,7 @@ private:
 
     platform::Linux::EpollSingleThreadedExecutor executor_;
     platform::O1HeapMemoryResource               o1_heap_mr_;
-    MediaMemoryResource                          media_block_mr_;
+    platform::BlockMemoryResource                media_block_mr_;
     platform::storage::KeyValue                  storage_;
     libcyphal::application::registry::Registry   registry_;
     Regs                                         regs_;

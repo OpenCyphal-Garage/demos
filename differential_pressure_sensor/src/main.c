@@ -48,9 +48,9 @@ typedef struct State
 {
     CanardMicrosecond started_at;
 
-    O1HeapInstance* heap;
-    CanardInstance  canard;
-    CanardTxQueue   canard_tx_queues[CAN_REDUNDANCY_FACTOR];
+    O1HeapInstance*       heap;
+    struct CanardInstance canard;
+    struct CanardTxQueue  canard_tx_queues[CAN_REDUNDANCY_FACTOR];
 
     /// These values are read from the registers at startup. You can also implement hot reloading if desired.
     struct
@@ -149,11 +149,11 @@ static CanardPortID getPublisherSubjectID(const char* const port_name, const cha
     return result;
 }
 
-static void send(State* const                        state,
-                 const CanardMicrosecond             tx_deadline_usec,
-                 const CanardTransferMetadata* const metadata,
-                 const size_t                        payload_size,
-                 const void* const                   payload_data)
+static void send(State* const                               state,
+                 const CanardMicrosecond                    tx_deadline_usec,
+                 const struct CanardTransferMetadata* const metadata,
+                 const size_t                               payload_size,
+                 const void* const                          payload_data)
 {
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
@@ -162,14 +162,14 @@ static void send(State* const                        state,
     }
 }
 
-static void sendResponse(State* const                        state,
-                         const CanardMicrosecond             tx_deadline_usec,
-                         const CanardTransferMetadata* const request_metadata,
-                         const size_t                        payload_size,
-                         const void* const                   payload_data)
+static void sendResponse(State* const                               state,
+                         const CanardMicrosecond                    tx_deadline_usec,
+                         const struct CanardTransferMetadata* const request_metadata,
+                         const size_t                               payload_size,
+                         const void* const                          payload_data)
 {
-    CanardTransferMetadata meta = *request_metadata;
-    meta.transfer_kind          = CanardTransferKindResponse;
+    struct CanardTransferMetadata meta = *request_metadata;
+    meta.transfer_kind                 = CanardTransferKindResponse;
     send(state, tx_deadline_usec, &meta, payload_size, payload_data);
 }
 
@@ -190,7 +190,7 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
         assert(err >= 0);
         if (err >= 0)
         {
-            const CanardTransferMetadata meta = {
+            const struct CanardTransferMetadata meta = {
                 .priority       = CanardPriorityHigh,
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = state->port_id.pub.differential_pressure,
@@ -228,7 +228,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         assert(err >= 0);
         if (err >= 0)
         {
-            const CanardTransferMetadata meta = {
+            const struct CanardTransferMetadata meta = {
                 .priority       = CanardPriorityNominal,
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_Heartbeat_1_0_FIXED_PORT_ID_,
@@ -261,7 +261,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
             assert(err >= 0);
             if (err >= 0)
             {
-                const CanardTransferMetadata meta = {
+                const struct CanardTransferMetadata meta = {
                     .priority       = CanardPrioritySlow,
                     .transfer_kind  = CanardTransferKindMessage,
                     .port_id        = uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
@@ -289,7 +289,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
         assert(err >= 0);
         if (err >= 0)
         {
-            const CanardTransferMetadata meta = {
+            const struct CanardTransferMetadata meta = {
                 .priority       = CanardPriorityNominal,
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = state->port_id.pub.static_air_temperature,
@@ -302,12 +302,12 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
 }
 
 /// This is needed only for constructing uavcan_node_port_List_0_1.
-static void fillSubscriptions(const CanardTreeNode* const tree, uavcan_node_port_SubjectIDList_0_1* const obj)
+static void fillSubscriptions(const struct CanardTreeNode* const tree, uavcan_node_port_SubjectIDList_0_1* const obj)
 {
     if (NULL != tree)
     {
         fillSubscriptions(tree->lr[0], obj);
-        const CanardRxSubscription* crs = (const CanardRxSubscription*) tree;
+        const struct CanardRxSubscription* crs = (const struct CanardRxSubscription*) tree;
         assert(crs->port_id <= CANARD_SUBJECT_ID_MAX);
         assert(obj->sparse_list.count < uavcan_node_port_SubjectIDList_0_1_sparse_list_ARRAY_CAPACITY_);
         obj->sparse_list.elements[obj->sparse_list.count++].value = crs->port_id;
@@ -316,12 +316,12 @@ static void fillSubscriptions(const CanardTreeNode* const tree, uavcan_node_port
 }
 
 /// This is needed only for constructing uavcan_node_port_List_0_1.
-static void fillServers(const CanardTreeNode* const tree, uavcan_node_port_ServiceIDList_0_1* const obj)
+static void fillServers(const struct CanardTreeNode* const tree, uavcan_node_port_ServiceIDList_0_1* const obj)
 {
     if (NULL != tree)
     {
         fillServers(tree->lr[0], obj);
-        const CanardRxSubscription* crs = (const CanardRxSubscription*) tree;
+        const struct CanardRxSubscription* crs = (const struct CanardRxSubscription*) tree;
         assert(crs->port_id <= CANARD_SERVICE_ID_MAX);
         (void) nunavutSetBit(&obj->mask_bitpacked_[0], sizeof(obj->mask_bitpacked_), crs->port_id, true);
         fillServers(tree->lr[1], obj);
@@ -366,7 +366,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
         size_t  serialized_size = uavcan_node_port_List_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_;
         if (uavcan_node_port_List_0_1_serialize_(&m, &serialized[0], &serialized_size) >= 0)
         {
-            const CanardTransferMetadata meta = {
+            const struct CanardTransferMetadata meta = {
                 .priority       = CanardPriorityOptional,  // Mind the priority.
                 .transfer_kind  = CanardTransferKindMessage,
                 .port_id        = uavcan_node_port_List_0_1_FIXED_PORT_ID_,
@@ -516,7 +516,7 @@ static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
     return resp;
 }
 
-static void processReceivedTransfer(State* const state, const CanardRxTransfer* const transfer)
+static void processReceivedTransfer(State* const state, const struct CanardRxTransfer* const transfer)
 {
     if (transfer->metadata.transfer_kind == CanardTransferKindMessage)
     {
@@ -733,8 +733,8 @@ int main(const int argc, char* const argv[])
     // Message subscriptions:
     if (state.canard.node_id > CANARD_NODE_ID_MAX)
     {
-        static CanardRxSubscription rx;
-        const int8_t                res =  //
+        static struct CanardRxSubscription rx;
+        const int8_t                       res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindMessage,
                               uavcan_pnp_NodeIDAllocationData_2_0_FIXED_PORT_ID_,
@@ -748,8 +748,8 @@ int main(const int argc, char* const argv[])
     }
     // Service servers:
     {
-        static CanardRxSubscription rx;
-        const int8_t                res =  //
+        static struct CanardRxSubscription rx;
+        const int8_t                       res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindRequest,
                               uavcan_node_GetInfo_1_0_FIXED_PORT_ID_,
@@ -762,8 +762,8 @@ int main(const int argc, char* const argv[])
         }
     }
     {
-        static CanardRxSubscription rx;
-        const int8_t                res =  //
+        static struct CanardRxSubscription rx;
+        const int8_t                       res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindRequest,
                               uavcan_node_ExecuteCommand_1_1_FIXED_PORT_ID_,
@@ -776,8 +776,8 @@ int main(const int argc, char* const argv[])
         }
     }
     {
-        static CanardRxSubscription rx;
-        const int8_t                res =  //
+        static struct CanardRxSubscription rx;
+        const int8_t                       res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindRequest,
                               uavcan_register_Access_1_0_FIXED_PORT_ID_,
@@ -790,8 +790,8 @@ int main(const int argc, char* const argv[])
         }
     }
     {
-        static CanardRxSubscription rx;
-        const int8_t                res =  //
+        static struct CanardRxSubscription rx;
+        const int8_t                       res =  //
             canardRxSubscribe(&state.canard,
                               CanardTransferKindRequest,
                               uavcan_register_List_1_0_FIXED_PORT_ID_,
@@ -833,15 +833,18 @@ int main(const int argc, char* const argv[])
         // Transmit pending frames from the prioritized TX queues managed by libcanard.
         for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
         {
-            CanardTxQueue* const     que = &state.canard_tx_queues[ifidx];
-            const CanardTxQueueItem* tqi = canardTxPeek(que);  // Find the highest-priority frame.
+            struct CanardTxQueue* const que = &state.canard_tx_queues[ifidx];
+            struct CanardTxQueueItem*   tqi = canardTxPeek(que);  // Find the highest-priority frame.
             while (tqi != NULL)
             {
                 // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
                 // Otherwise just drop it and move on to the next one.
                 if ((tqi->tx_deadline_usec == 0) || (tqi->tx_deadline_usec > monotonic_time))
                 {
-                    const int16_t result = socketcanPush(sock[ifidx], &tqi->frame, 0);  // Non-blocking write attempt.
+                    const struct CanardFrame canard_frame = {.extended_can_id = tqi->frame.extended_can_id,
+                                                             .payload         = {.size = tqi->frame.payload.size,
+                                                                                 .data = tqi->frame.payload.data}};
+                    const int16_t result = socketcanPush(sock[ifidx], &canard_frame, 0);  // Non-blocking write attempt.
                     if (result == 0)
                     {
                         break;  // The queue is full, we will try again on the next iteration.
@@ -851,8 +854,10 @@ int main(const int argc, char* const argv[])
                         return -result;  // SocketCAN interface failure (link down?)
                     }
                 }
-                CanardTxQueueItem* const mut_tqi = canardTxPop(que, tqi);
-                que->memory.deallocate(que->memory.user_reference, mut_tqi->allocated_size, mut_tqi);
+
+                struct CanardTxQueueItem* const mut_tqi = canardTxPop(que, tqi);
+                canardTxFree(que, &state.canard, mut_tqi);
+
                 tqi = canardTxPeek(que);
             }
         }
@@ -863,9 +868,9 @@ int main(const int argc, char* const argv[])
         // them out and remove duplicates automatically.
         for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
         {
-            CanardFrame   frame                  = {0};
-            uint8_t       buf[CANARD_MTU_CAN_FD] = {0};
-            const int16_t socketcan_result       = socketcanPop(sock[ifidx], &frame, NULL, sizeof(buf), buf, 0, NULL);
+            struct CanardFrame frame                  = {0};
+            uint8_t            buf[CANARD_MTU_CAN_FD] = {0};
+            const int16_t      socketcan_result = socketcanPop(sock[ifidx], &frame, NULL, sizeof(buf), buf, 0, NULL);
             if (socketcan_result == 0)  // The read operation has timed out with no frames, nothing to do here.
             {
                 break;
@@ -877,7 +882,7 @@ int main(const int argc, char* const argv[])
             // The SocketCAN adapter uses the wall clock for timestamping, but we need monotonic.
             // Wall clock can only be used for time synchronization.
             const CanardMicrosecond timestamp_usec = getMonotonicMicroseconds();
-            CanardRxTransfer        transfer       = {0};
+            struct CanardRxTransfer transfer       = {0};
             const int8_t canard_result = canardRxAccept(&state.canard, timestamp_usec, &frame, ifidx, &transfer, NULL);
             if (canard_result > 0)
             {
