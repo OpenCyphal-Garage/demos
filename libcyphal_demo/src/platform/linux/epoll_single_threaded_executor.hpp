@@ -12,14 +12,24 @@
 
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/rtti.hpp>
+#include <cetl/visit_helpers.hpp>
 #include <libcyphal/errors.hpp>
 #include <libcyphal/executor.hpp>
 #include <libcyphal/platform/single_threaded_executor.hpp>
+#include <libcyphal/transport/errors.hpp>
 #include <libcyphal/types.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cerrno>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <sys/epoll.h>
 #include <thread>
 #include <unistd.h>
+#include <utility>
 
 namespace platform
 {
