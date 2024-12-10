@@ -153,12 +153,18 @@ static void send(State* const                               state,
                  const CanardMicrosecond                    tx_deadline_usec,
                  const struct CanardTransferMetadata* const metadata,
                  const size_t                               payload_size,
-                 const void* const                          payload_data)
+                 const void* const                          payload_data,
+                 const CanardMicrosecond                    now_usec)
 {
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {
         const struct CanardPayload payload = {.size = payload_size, .data = payload_data};
-        (void) canardTxPush(&state->canard_tx_queues[ifidx], &state->canard, tx_deadline_usec, metadata, payload);
+        (void) canardTxPush(&state->canard_tx_queues[ifidx],
+                            &state->canard,
+                            tx_deadline_usec,
+                            metadata,
+                            payload,
+                            now_usec);
     }
 }
 
@@ -166,15 +172,16 @@ static void sendResponse(State* const                               state,
                          const CanardMicrosecond                    tx_deadline_usec,
                          const struct CanardTransferMetadata* const request_metadata,
                          const size_t                               payload_size,
-                         const void* const                          payload_data)
+                         const void* const                          payload_data,
+                         const CanardMicrosecond                    now_usec)
 {
     struct CanardTransferMetadata meta = *request_metadata;
     meta.transfer_kind                 = CanardTransferKindResponse;
-    send(state, tx_deadline_usec, &meta, payload_size, payload_data);
+    send(state, tx_deadline_usec, &meta, payload_size, payload_data, now_usec);
 }
 
 /// Invoked at the rate of the fastest loop.
-static void handleFastLoop(State* const state, const CanardMicrosecond monotonic_time)
+static void handleFastLoop(State* const state, const CanardMicrosecond now_usec)
 {
     const bool anonymous = state->canard.node_id > CANARD_NODE_ID_MAX;
 
@@ -197,20 +204,20 @@ static void handleFastLoop(State* const state, const CanardMicrosecond monotonic
                 .remote_node_id = CANARD_NODE_ID_UNSET,
                 .transfer_id    = (CanardTransferID) state->next_transfer_id.differential_pressure++,  // Increment!
             };
-            send(state, monotonic_time + 10 * KILO, &meta, serialized_size, &serialized[0]);
+            send(state, now_usec + 10 * KILO, &meta, serialized_size, &serialized[0], now_usec);
         }
     }
 }
 
 /// Invoked every second.
-static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_time)
+static void handle1HzLoop(State* const state, const CanardMicrosecond now_usec)
 {
     const bool anonymous = state->canard.node_id > CANARD_NODE_ID_MAX;
     // Publish heartbeat every second unless the local node is anonymous. Anonymous nodes shall not publish heartbeat.
     if (!anonymous)
     {
         uavcan_node_Heartbeat_1_0 heartbeat = {0};
-        heartbeat.uptime                    = (uint32_t) ((monotonic_time - state->started_at) / MEGA);
+        heartbeat.uptime                    = (uint32_t) ((now_usec - state->started_at) / MEGA);
         heartbeat.mode.value                = uavcan_node_Mode_1_0_OPERATIONAL;
         const O1HeapDiagnostics heap_diag   = o1heapGetDiagnostics(state->heap);
         if (heap_diag.oom_count > 0)
@@ -236,10 +243,11 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_heartbeat++),
             };
             send(state,
-                 monotonic_time + MEGA,  // Set transmission deadline 1 second, optimal for heartbeat.
+                 now_usec + MEGA,  // Set transmission deadline 1 second, optimal for heartbeat.
                  &meta,
                  serialized_size,
-                 &serialized[0]);
+                 &serialized[0],
+                 now_usec);
         }
     }
     else  // If we don't have a node-ID, obtain one by publishing allocation request messages until we get a response.
@@ -269,10 +277,11 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                     .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_pnp_allocation++),
                 };
                 send(state,  // The response will arrive asynchronously eventually.
-                     monotonic_time + MEGA,
+                     now_usec + MEGA,
                      &meta,
                      serialized_size,
-                     &serialized[0]);
+                     &serialized[0],
+                     now_usec);
             }
         }
     }
@@ -296,7 +305,7 @@ static void handle1HzLoop(State* const state, const CanardMicrosecond monotonic_
                 .remote_node_id = CANARD_NODE_ID_UNSET,
                 .transfer_id    = (CanardTransferID) state->next_transfer_id.static_air_temperature++,  // Increment!
             };
-            send(state, monotonic_time + MEGA, &meta, serialized_size, &serialized[0]);
+            send(state, now_usec + MEGA, &meta, serialized_size, &serialized[0], now_usec);
         }
     }
 }
@@ -329,7 +338,7 @@ static void fillServers(const struct CanardTreeNode* const tree, uavcan_node_por
 }
 
 /// Invoked every 10 seconds.
-static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic_time)
+static void handle01HzLoop(State* const state, const CanardMicrosecond now_usec)
 {
     // Publish the recommended (not required) port introspection message. No point publishing it if we're anonymous.
     // The message is a bit heavy on the stack (about 2 KiB) but this is not a problem for a modern MCU.
@@ -373,7 +382,7 @@ static void handle01HzLoop(State* const state, const CanardMicrosecond monotonic
                 .remote_node_id = CANARD_NODE_ID_UNSET,
                 .transfer_id    = (CanardTransferID) (state->next_transfer_id.uavcan_node_port_list++),
             };
-            send(state, monotonic_time + MEGA, &meta, serialized_size, &serialized[0]);
+            send(state, now_usec + MEGA, &meta, serialized_size, &serialized[0], now_usec);
         }
     }
 }
@@ -516,7 +525,9 @@ static uavcan_node_GetInfo_Response_1_0 processRequestNodeGetInfo()
     return resp;
 }
 
-static void processReceivedTransfer(State* const state, const struct CanardRxTransfer* const transfer)
+static void processReceivedTransfer(State* const                         state,
+                                    const struct CanardRxTransfer* const transfer,
+                                    const CanardMicrosecond              now_usec)
 {
     if (transfer->metadata.transfer_kind == CanardTransferKindMessage)
     {
@@ -549,7 +560,8 @@ static void processReceivedTransfer(State* const state, const struct CanardRxTra
                              transfer->timestamp_usec + MEGA,
                              &transfer->metadata,
                              serialized_size,
-                             &serialized[0]);
+                             &serialized[0],
+                             now_usec);
             }
             else
             {
@@ -571,7 +583,8 @@ static void processReceivedTransfer(State* const state, const struct CanardRxTra
                                  transfer->timestamp_usec + MEGA,
                                  &transfer->metadata,
                                  serialized_size,
-                                 &serialized[0]);
+                                 &serialized[0],
+                                 now_usec);
                 }
             }
         }
@@ -590,7 +603,8 @@ static void processReceivedTransfer(State* const state, const struct CanardRxTra
                                  transfer->timestamp_usec + MEGA,
                                  &transfer->metadata,
                                  serialized_size,
-                                 &serialized[0]);
+                                 &serialized[0],
+                                 now_usec);
                 }
             }
         }
@@ -609,7 +623,8 @@ static void processReceivedTransfer(State* const state, const struct CanardRxTra
                                  transfer->timestamp_usec + MEGA,
                                  &transfer->metadata,
                                  serialized_size,
-                                 &serialized[0]);
+                                 &serialized[0],
+                                 now_usec);
                 }
             }
         }
@@ -813,21 +828,21 @@ int main(const int argc, char* const argv[])
     do
     {
         // Run a trivial scheduler polling the loops that run the business logic.
-        CanardMicrosecond monotonic_time = getMonotonicMicroseconds();
-        if (monotonic_time >= next_fast_iter_at)
+        const CanardMicrosecond now_usec = getMonotonicMicroseconds();
+        if (now_usec >= next_fast_iter_at)
         {
             next_fast_iter_at += fast_loop_period;
-            handleFastLoop(&state, monotonic_time);
+            handleFastLoop(&state, now_usec);
         }
-        if (monotonic_time >= next_1_hz_iter_at)
+        if (now_usec >= next_1_hz_iter_at)
         {
             next_1_hz_iter_at += MEGA;
-            handle1HzLoop(&state, monotonic_time);
+            handle1HzLoop(&state, now_usec);
         }
-        if (monotonic_time >= next_01_hz_iter_at)
+        if (now_usec >= next_01_hz_iter_at)
         {
             next_01_hz_iter_at += MEGA * 10;
-            handle01HzLoop(&state, monotonic_time);
+            handle01HzLoop(&state, now_usec);
         }
 
         // Transmit pending frames from the prioritized TX queues managed by libcanard.
@@ -839,7 +854,7 @@ int main(const int argc, char* const argv[])
             {
                 // Attempt transmission only if the frame is not yet timed out while waiting in the TX queue.
                 // Otherwise just drop it and move on to the next one.
-                if ((tqi->tx_deadline_usec == 0) || (tqi->tx_deadline_usec > monotonic_time))
+                if ((tqi->tx_deadline_usec == 0) || (tqi->tx_deadline_usec > now_usec))
                 {
                     const struct CanardFrame canard_frame = {.extended_can_id = tqi->frame.extended_can_id,
                                                              .payload         = {.size = tqi->frame.payload.size,
@@ -886,7 +901,7 @@ int main(const int argc, char* const argv[])
             const int8_t canard_result = canardRxAccept(&state.canard, timestamp_usec, &frame, ifidx, &transfer, NULL);
             if (canard_result > 0)
             {
-                processReceivedTransfer(&state, &transfer);
+                processReceivedTransfer(&state, &transfer, now_usec);
                 state.canard.memory.deallocate(state.canard.memory.user_reference,
                                                transfer.payload.allocated_size,
                                                transfer.payload.data);
