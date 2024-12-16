@@ -144,7 +144,7 @@ public:
                 const Value::allocator_type allocator{&memory_};
                 Value                       value{allocator};
                 auto&                       uint16s = value.set_natural16();
-                uint16s.value.push_back(value_.front());
+                std::copy(value_.cbegin(), value_.cend(), std::back_inserter(uint16s.value));
                 return value;
             }
 
@@ -180,6 +180,7 @@ public:
         StringParam<MaxNodeDesc>    node_desc_   {  "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
         Natural16Param<1>           node_id_     {  "uavcan.node.id",           registry_,  {65535U},       {true}};
         StringParam<MaxIfaceLen>    udp_iface_   {  "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        Natural16Param<2>           demo_u16s_   {  "demo.u16s",                registry_,  {0U, 0U},       {false}};
         Register<RegisterFootprint> sys_info_mem_block_;
         Register<RegisterFootprint> sys_info_mem_general_;
         // clang-format on
