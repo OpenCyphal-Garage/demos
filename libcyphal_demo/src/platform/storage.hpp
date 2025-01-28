@@ -16,6 +16,8 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <sys/stat.h>
 

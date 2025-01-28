@@ -28,9 +28,9 @@ alignas(O1HEAP_ALIGNMENT) std::array<cetl::byte, HeapSize> s_heap_arena{};
 
 }  // namespace
 
-Application::Application()
+Application::Application(const char* const root_path)
     : o1_heap_mr_{s_heap_arena}
-    , storage_{"/tmp/" NODE_NAME}
+    , storage_{root_path}
     , registry_{o1_heap_mr_}
     , media_block_mr_{*cetl::pmr::new_delete_resource()}
     , regs_{o1_heap_mr_, registry_, media_block_mr_}

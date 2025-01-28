@@ -199,7 +199,7 @@ public:
         Regs::StringParam<MaxNodeDesc>& description;
     };
 
-    Application();
+    explicit Application(const char* const root_path);
     ~Application();
 
     Application(const Application&)            = delete;

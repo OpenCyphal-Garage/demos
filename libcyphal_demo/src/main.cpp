@@ -16,8 +16,12 @@
 #include <libcyphal/types.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
+#include <ios>
+#include <iomanip>
 #include <iostream>
 #include <unistd.h>  // execve
 #include <utility>
@@ -100,11 +104,20 @@ enum class ExitCode : std::uint8_t
 
 };  // ExitCode
 
-libcyphal::Expected<bool, ExitCode> run_application()
+void PrintUniqueIdTo(const std::array<std::uint8_t, 16>& unique_id, std::ostream& os)
+{
+    for (const auto byte : unique_id)
+    {
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<std::uint32_t>(byte);
+    }
+}
+
+libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
 {
     std::cout << "\n🟢 ***************** LibCyphal demo *******************\n";
+    std::cout << "Root path : '" << root_path << "'\n";
 
-    Application application;
+    Application application{root_path};
     auto&       executor       = application.executor();
     auto&       general_mr     = application.general_memory();
     auto&       media_block_mr = application.media_block_memory();
@@ -130,9 +143,13 @@ libcyphal::Expected<bool, ExitCode> run_application()
 
     // 2. Create the presentation layer object.
     //
+    const auto unique_id = application.getUniqueId();
     (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
     std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
     std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
+    std::cout << "Unique-ID : ";
+    PrintUniqueIdTo(unique_id, std::cout);
+    std::cout << "\n";
     libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
 
     // 3. Create the node object with name.
@@ -156,7 +173,7 @@ libcyphal::Expected<bool, ExitCode> run_application()
         .setName(node_params.description.value())
         .setSoftwareVersion(VERSION_MAJOR, VERSION_MINOR)
         .setSoftwareVcsRevisionId(VCS_REVISION_ID)
-        .setUniqueId(application.getUniqueId());
+        .setUniqueId(unique_id);
     //
     // Update node's health according to states of memory resources.
     node.heartbeatProducer().setUpdateCallback([&](const auto& arg) {
@@ -213,9 +230,15 @@ libcyphal::Expected<bool, ExitCode> run_application()
 
 }  // namespace
 
-int main(const int, char* const argv[])
+int main(const int argc, char* const argv[])
 {
-    const auto result = run_application();
+    const char* root_path = "/tmp/" NODE_NAME;  // NOLINT
+    if (argc > 1)
+    {
+        root_path = argv[1];  // NOLINT
+    }
+
+    const auto result = run_application(root_path);
     if (const auto* const err = cetl::get_if<ExitCode>(&result))
     {
         return static_cast<int>(*err);
