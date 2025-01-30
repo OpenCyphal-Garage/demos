@@ -7,6 +7,7 @@
 #ifndef COMMAND_PROVIDER_HPP_INCLUDED
 #define COMMAND_PROVIDER_HPP_INCLUDED
 
+#include "libcyphal/application/node.hpp"
 #include "libcyphal/presentation/presentation.hpp"
 #include "libcyphal/presentation/server.hpp"
 #include "libcyphal/types.hpp"
@@ -28,9 +29,10 @@
 template <typename Derived>
 class ExecCmdProvider  // NOSONAR cpp:S4963
 {
-    using Service = uavcan::node::ExecuteCommand_1_3;
-
 public:
+    using Service = uavcan::node::ExecuteCommand_1_3;
+    using Server  = libcyphal::presentation::ServiceServer<Service>;
+
     /// Defines the response type for the ExecuteCommand provider.
     ///
     using Response = Service::Response;
@@ -48,10 +50,11 @@ public:
 
     /// Factory method to create a ExecuteCommand instance.
     ///
+    /// @param node The application layer node instance. In use to access heartbeat producer.
     /// @param presentation The presentation layer instance. In use to create 'ExecuteCommand' service server.
     /// @return The ExecuteCommand provider instance or a failure.
     ///
-    static auto make(libcyphal::presentation::Presentation& presentation)
+    static auto make(libcyphal::application::Node& node, libcyphal::presentation::Presentation& presentation)
         -> libcyphal::Expected<Derived, libcyphal::presentation::Presentation::MakeFailure>
     {
         auto maybe_srv = presentation.makeServer<Service>();
@@ -60,7 +63,7 @@ public:
             return std::move(*failure);
         }
 
-        return Derived{presentation, cetl::get<Server>(std::move(maybe_srv))};
+        return Derived{node, presentation, cetl::get<Server>(std::move(maybe_srv))};
     }
 
     ExecCmdProvider(ExecCmdProvider&& other) noexcept
@@ -108,9 +111,7 @@ public:
         return false;
     }
 
-private:
-    using Server = libcyphal::presentation::ServiceServer<Service>;
-
+protected:
     ExecCmdProvider(const libcyphal::presentation::Presentation& presentation, Server&& server)
         : alloc_{&presentation.memory()}
         , server_{std::move(server)}
@@ -119,6 +120,7 @@ private:
         setupOnRequestCallback();
     }
 
+private:
     void setupOnRequestCallback()
     {
         server_.setOnRequestCallback([this](const auto& arg, auto continuation) {

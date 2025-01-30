@@ -15,13 +15,15 @@
 #include <libcyphal/transport/transport.hpp>
 #include <libcyphal/types.hpp>
 
+#include <uavcan/node/Health_1_0.hpp>
+#include <uavcan/node/Mode_1_0.hpp>
+
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
-#include <ios>
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <unistd.h>  // execve
 #include <utility>
@@ -36,7 +38,13 @@ namespace
 class AppExecCmdProvider final : public ExecCmdProvider<AppExecCmdProvider>
 {
 public:
-    using ExecCmdProvider::ExecCmdProvider;
+    AppExecCmdProvider(libcyphal::application::Node&                node,
+                       const libcyphal::presentation::Presentation& presentation,
+                       Server&&                                     server)
+        : ExecCmdProvider{presentation, std::move(server)}
+        , node_{node}
+    {
+    }
 
     bool should_break() const noexcept
     {
@@ -80,14 +88,21 @@ private:
             restart_required_ = true;
             break;
 
+        case Request::COMMAND_BEGIN_SOFTWARE_UPDATE:
+            //
+            std::cout << "🚧 COMMAND_BEGIN_SOFTWARE_UPDATE (file='" << parameter << "')\n";
+            node_.heartbeatProducer().message().mode.value = uavcan::node::Mode_1_0::SOFTWARE_UPDATE;
+            break;
+
         default:
             return ExecCmdProvider::onCommand(command, parameter, response);
         }
         return true;
     }
 
-    bool should_power_off_{false};
-    bool restart_required_{false};
+    libcyphal::application::Node& node_;
+    bool                          should_power_off_{false};
+    bool                          restart_required_{false};
 
 };  // AppExecCmdProvider
 
@@ -196,8 +211,8 @@ libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
 
     // 6. Bring up the command execution provider.
     //
-    auto maybe_exec_cmd_provider = AppExecCmdProvider::make(presentation);
-    if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_node))
+    auto maybe_exec_cmd_provider = AppExecCmdProvider::make(node, presentation);
+    if (const auto* failure = cetl::get_if<libcyphal::application::Node::MakeFailure>(&maybe_exec_cmd_provider))
     {
         std::cerr << "❌ Failed to create exec cmd provider.\n";
         return ExitCode::ExecCmdProviderCreationFailure;
