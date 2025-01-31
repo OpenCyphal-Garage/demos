@@ -275,7 +275,11 @@ private:
 
     void complete()
     {
-        std::cout << "\nDownload completed (err=" << file_stats_.file_error.value << ").\n" << std::flush;
+        const auto duration    = time_provider_.now() - file_stats_.start_time;
+        const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        std::cout << "\nDownload completed (err=" << file_stats_.file_error.value  //
+                  << ", time=" << duration_ms << "ms).\n"
+                  << std::flush;
 
         get_info_promise_.reset();
         get_info_client_.reset();
