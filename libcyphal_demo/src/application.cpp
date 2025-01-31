@@ -6,6 +6,7 @@
 
 #include "application.hpp"
 
+#include <libcyphal/application/registry/registry_impl.hpp>
 #include <libcyphal/platform/storage.hpp>
 
 #include <cetl/pf17/cetlpf.hpp>

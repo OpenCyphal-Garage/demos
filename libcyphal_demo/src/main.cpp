@@ -14,6 +14,7 @@
 #include <libcyphal/application/node.hpp>
 #include <libcyphal/presentation/presentation.hpp>
 #include <libcyphal/time_provider.hpp>
+#include <libcyphal/transport/transfer_id_map.hpp>
 #include <libcyphal/transport/transport.hpp>
 #include <libcyphal/transport/types.hpp>
 #include <libcyphal/types.hpp>
@@ -24,10 +25,12 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <ios>
 #include <iostream>
 #include <unistd.h>
+#include <unordered_map>
 #include <utility>
 
 using namespace std::chrono_literals;
@@ -131,6 +134,36 @@ enum class ExitCode : std::uint8_t
 
 };  // ExitCode
 
+class TransferIdMap final : public libcyphal::transport::ITransferIdMap
+{
+public:
+    explicit TransferIdMap(cetl::pmr::memory_resource& memory) noexcept
+        : session_spec_to_transfer_id_{&memory}
+    {
+    }
+
+private:
+    using TransferId = libcyphal::transport::TransferId;
+    using PmvAlloc   = cetl::pmr::polymorphic_allocator<std::pair<const SessionSpec, TransferId>>;
+    using PmrMap     = std::unordered_map<SessionSpec, TransferId, std::hash<SessionSpec>, std::equal_to<>, PmvAlloc>;
+
+    // ITransferIdMap
+
+    TransferId getIdFor(const SessionSpec& session_spec) const noexcept override
+    {
+        const auto it = session_spec_to_transfer_id_.find(session_spec);
+        return it != session_spec_to_transfer_id_.end() ? it->second : 0;
+    }
+
+    void setIdFor(const SessionSpec& session_spec, const TransferId transfer_id) noexcept override
+    {
+        session_spec_to_transfer_id_[session_spec] = transfer_id;
+    }
+
+    PmrMap session_spec_to_transfer_id_;
+
+};  // TransferIdMap
+
 void PrintUniqueIdTo(const std::array<std::uint8_t, 16>& unique_id, std::ostream& os)
 {
     const auto original_flags = os.flags();
@@ -169,6 +202,7 @@ libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
         std::cerr << "❌ Failed to create any transport.\n";
         return ExitCode::TransportCreationFailure;
     }
+    TransferIdMap transfer_id_map{general_mr};
 
     // 2. Create the presentation layer object.
     //
@@ -179,7 +213,9 @@ libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
     std::cout << "Unique-ID : ";
     PrintUniqueIdTo(unique_id, std::cout);
     std::cout << "\n";
+    //
     libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
+    presentation.setTransferIdMap(&transfer_id_map);
 
     // 3. Create the node object with name.
     //

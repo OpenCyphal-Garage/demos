@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <iomanip>
 #include <iostream>
 #include <utility>
 
@@ -74,6 +75,7 @@ public:
         }
 
         read_request_.offset    = 0;
+        file_stats_.start_time  = time_provider_.now();
         read_request_.path.path = {file_path.begin(), file_path.end(), &presentation_.memory()};
 
         std::cout << "Getting file info (path='" << file_path << "')...\n";
@@ -275,10 +277,10 @@ private:
 
     void complete()
     {
-        const auto duration    = time_provider_.now() - file_stats_.start_time;
-        const auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        const auto duration = time_provider_.now() - file_stats_.start_time;
         std::cout << "\nDownload completed (err=" << file_stats_.file_error.value  //
-                  << ", time=" << duration_ms << "ms).\n"
+                  << ", time=" << std::fixed << std::setprecision(6)               // NOLINT
+                  << std::chrono::duration_cast<std::chrono::duration<double>>(duration).count() << "s).\n"
                   << std::flush;
 
         get_info_promise_.reset();
