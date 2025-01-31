@@ -133,10 +133,12 @@ enum class ExitCode : std::uint8_t
 
 void PrintUniqueIdTo(const std::array<std::uint8_t, 16>& unique_id, std::ostream& os)
 {
+    const auto original_flags = os.flags();
     for (const auto byte : unique_id)
     {
         os << std::hex << std::setw(2) << std::setfill('0') << static_cast<std::uint32_t>(byte);
     }
+    os.flags(original_flags);
 }
 
 libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
