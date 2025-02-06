@@ -23,7 +23,7 @@
 namespace
 {
 
-constexpr std::size_t HeapSize = 16ULL * 1024ULL;
+constexpr std::size_t HeapSize = 32ULL * 1024ULL;
 alignas(O1HEAP_ALIGNMENT) std::array<cetl::byte, HeapSize> s_heap_arena{};  // NOLINT
 
 constexpr std::size_t BlockHeapSize = 128ULL * 1024ULL;
