@@ -37,19 +37,8 @@ public:
         return FileDownloader{presentation, time_provider};
     }
 
-    FileDownloader(FileDownloader&& other) noexcept
-        : presentation_{other.presentation_}
-        , time_provider_{other.time_provider_}
-        , get_info_client_{std::move(other.get_info_client_)}
-        , get_info_promise_{std::move(other.get_info_promise_)}
-        , read_client_{std::move(other.read_client_)}
-        , read_promise_{std::move(other.read_promise_)}
-        , read_request_{std::move(other.read_request_)}
-        , file_stats_{other.file_stats_}
-    {
-    }
-
-    ~FileDownloader() = default;
+    FileDownloader(FileDownloader&& other) noexcept = default;
+    ~FileDownloader()                               = default;
 
     FileDownloader(const FileDownloader&)                = delete;
     FileDownloader& operator=(const FileDownloader&)     = delete;
@@ -62,33 +51,25 @@ public:
         read_promise_.reset();
         read_client_.reset();
 
-        file_stats_.file_size        = 0;
-        file_stats_.file_progress    = 0;
-        file_stats_.file_error.value = uavcan::file::Error_1_0::OK;
+        state_.file_size        = 0;
+        state_.file_progress    = 0;
+        state_.file_path        = file_path;
+        state_.start_time       = time_provider_.now();
+        state_.file_error.value = uavcan::file::Error_1_0::OK;
 
         get_info_client_ = makeClient<Svc::GetInfo>("GetInfo", remote_node_id);
         read_client_     = makeClient<Svc::Read>("Read", remote_node_id);
         if (!get_info_client_ || !read_client_)
         {
-            file_stats_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
+            state_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
             return false;
         }
 
         read_request_.offset    = 0;
-        file_stats_.start_time  = time_provider_.now();
         read_request_.path.path = {file_path.begin(), file_path.end(), &presentation_.memory()};
 
         std::cout << "Getting file info (path='" << file_path << "')...\n";
-        Svc::GetInfo::Request gi_request{&presentation_.memory()};
-        gi_request.path.path = {file_path.begin(), file_path.end(), &presentation_.memory()};
-        return makeRequest<Svc::GetInfo>("GetInfo",
-                                         get_info_client_,
-                                         get_info_promise_,
-                                         gi_request,
-                                         [this](const auto& arg) {
-                                             //
-                                             handleGetInfoPromiseResult(arg.result);
-                                         });
+        return initiateGetInfoRequest();
     }
 
 private:
@@ -111,14 +92,16 @@ private:
 
     };  // Svc
 
-    struct FileStats
+    struct State
     {
+        std::string             file_path;
         uavcan::file::Error_1_0 file_error;
         libcyphal::TimePoint    start_time;
         std::size_t             file_size{0};
         std::size_t             file_progress{0};
+        int                     failed_requests{0};
 
-    };  // FileStats
+    };  // State
 
     FileDownloader(Presentation& presentation, libcyphal::ITimeProvider& time_provider)
         : presentation_{presentation}
@@ -155,7 +138,7 @@ private:
         if (const auto* const failure = cetl::get_if<typename Service::Failure>(&maybe_promise))
         {
             (void) failure;
-            file_stats_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
+            state_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
             std::cerr << "Can't make '" << role << "' request.\n";
             complete();
             return false;
@@ -166,17 +149,41 @@ private:
         return true;
     }
 
+    bool initiateGetInfoRequest()
+    {
+        Svc::GetInfo::Request request{&presentation_.memory()};
+        request.path.path = {state_.file_path.begin(), state_.file_path.end(), &presentation_.memory()};
+        return makeRequest<Svc::GetInfo>("GetInfo",
+                                         get_info_client_,
+                                         get_info_promise_,
+                                         request,
+                                         [this](const auto& arg) {
+                                             //
+                                             handleGetInfoPromiseResult(arg.result);
+                                         });
+    }
+
     void handleGetInfoPromiseResult(const Svc::GetInfo::Promise::Result& result)
     {
         if (const auto* const failure = cetl::get_if<ResponsePromiseFailure>(&result))
         {
             (void) failure;
-            file_stats_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
-            std::cerr << "GetInfo request failed.\n";
-            complete();
+            state_.failed_requests++;
+            if (state_.failed_requests >= MaxRetriesOnRequestFailure)
+            {
+                std::cerr << "'GetInfo' request failed (times=" << state_.failed_requests << ").\n";
+                state_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
+                complete();
+            }
+            else
+            {
+                std::cerr << "'GetInfo' request failed (times=" << state_.failed_requests << "). Retrying…\n";
+                initiateGetInfoRequest();
+            }
             return;
         }
-        const auto success = cetl::get<Svc::GetInfo::Promise::Success>(result);
+        state_.failed_requests = 0;
+        const auto success     = cetl::get<Svc::GetInfo::Promise::Success>(result);
 
         get_info_promise_.reset();
         get_info_client_.reset();
@@ -184,22 +191,22 @@ private:
         const auto& response = success.response;
         if (response._error.value == uavcan::file::Error_1_0::OK)
         {
-            file_stats_.file_size = response.size;
-            std::cout << "Downloading (size=" << file_stats_.file_size << ") ...\n";
-            if (file_stats_.file_size > 0)
+            state_.file_size = response.size;
+            std::cout << "Downloading (size=" << state_.file_size << ") ...\n";
+            if (state_.file_size > 0)
             {
-                file_stats_.start_time = time_provider_.now();
+                state_.start_time = time_provider_.now();
 
                 printProgress();
                 initiateNextReadRequest();
                 return;
             }
 
-            file_stats_.file_error.value = uavcan::file::Error_1_0::OK;
+            state_.file_error.value = uavcan::file::Error_1_0::OK;
         }
         else
         {
-            file_stats_.file_error = response._error;
+            state_.file_error = response._error;
             std::cerr << "Can't get file info (err=" << response._error.value << ").\n";
         }
 
@@ -219,11 +226,22 @@ private:
         if (const auto* const failure = cetl::get_if<ResponsePromiseFailure>(&result))
         {
             (void) failure;
-            file_stats_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
-            std::cerr << "Read request failed.\n";
-            complete();
+            state_.failed_requests++;
+            if (state_.failed_requests >= MaxRetriesOnRequestFailure)
+            {
+                std::cerr << "'Read' request failed (times=" << state_.failed_requests << ").\n";
+                state_.file_error.value = uavcan::file::Error_1_0::UNKNOWN_ERROR;
+                complete();
+            }
+            else
+            {
+                std::cerr << "'Read' request failed (times=" << state_.failed_requests << "). Retrying…\n";
+                initiateNextReadRequest();
+            }
             return;
         }
+        state_.failed_requests = 0;
+
         const auto success = cetl::get<Svc::Read::Promise::Success>(std::move(result));
 
         const auto& response = success.response;
@@ -243,7 +261,7 @@ private:
         }
         else
         {
-            file_stats_.file_error = response._error;
+            state_.file_error = response._error;
             std::cerr << "Can't read file (err=" << response._error.value << ").\n";
         }
         complete();
@@ -251,17 +269,17 @@ private:
 
     void printProgress()
     {
-        CETL_DEBUG_ASSERT(file_stats_.file_size > 0, "");
-        CETL_DEBUG_ASSERT(read_request_.offset <= file_stats_.file_size, "");
+        CETL_DEBUG_ASSERT(state_.file_size > 0, "");
+        CETL_DEBUG_ASSERT(read_request_.offset <= state_.file_size, "");
 
-        const auto progress = (read_request_.offset * 100U) / file_stats_.file_size;
+        const auto progress = (read_request_.offset * 100U) / state_.file_size;
         CETL_DEBUG_ASSERT(progress <= 100U, "");
 
         // Print progress only if its integer % has changed (or in the beginning).
-        if ((progress != file_stats_.file_progress) || (read_request_.offset == 0))
+        if ((progress != state_.file_progress) || (read_request_.offset == 0))
         {
-            file_stats_.file_progress = progress;
-            const auto duration       = time_provider_.now() - file_stats_.start_time;
+            state_.file_progress = progress;
+            const auto duration  = time_provider_.now() - state_.start_time;
             if (const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(duration).count())
             {
                 const auto speed_kb_per_sec = (read_request_.offset * 1000000U) / (duration_us * 1024U);
@@ -277,9 +295,9 @@ private:
 
     void complete()
     {
-        const auto duration = time_provider_.now() - file_stats_.start_time;
-        std::cout << "\nDownload completed (err=" << file_stats_.file_error.value  //
-                  << ", time=" << std::fixed << std::setprecision(6)               // NOLINT
+        const auto duration = time_provider_.now() - state_.start_time;
+        std::cout << "\nDownload completed (err=" << state_.file_error.value  //
+                  << ", time=" << std::fixed << std::setprecision(6)          // NOLINT
                   << std::chrono::duration_cast<std::chrono::duration<double>>(duration).count() << "s).\n"
                   << std::flush;
 
@@ -291,6 +309,8 @@ private:
 
     // MARK: Data members:
 
+    static constexpr int MaxRetriesOnRequestFailure = 10;
+
     Presentation&                         presentation_;
     libcyphal::ITimeProvider&             time_provider_;
     cetl::optional<Svc::GetInfo::Client>  get_info_client_;
@@ -298,7 +318,7 @@ private:
     cetl::optional<Svc::Read::Client>     read_client_;
     cetl::optional<Svc::Read::Promise>    read_promise_;
     Svc::Read::Request                    read_request_{&presentation_.memory()};
-    FileStats                             file_stats_;
+    State                                 state_;
 
 };  // FileDownloader
 
