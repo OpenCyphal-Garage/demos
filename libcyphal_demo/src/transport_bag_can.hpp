@@ -65,6 +65,13 @@ struct TransportBagCan final
         const std::size_t     block_size      = mtu;
         const std::size_t     pool_size       = media_collection_.count() * TxQueueCapacity * block_size;
         media_block_mr_.setup(pool_size, block_size, block_alignment);
+
+        // To support redundancy (multiple homogeneous interfaces), it's important to have a non-default
+        // handler which "swallows" expected transient failures (by returning `nullopt` result).
+        // Otherwise, the default Cyphal behavior will fail/interrupt current and future transfers
+        // if some of its media encounter transient failures - thus breaking the whole redundancy goal,
+        // namely, maintain communication if at least one of the interfaces is still up and running.
+        //
         transport_->setTransientErrorHandler([](auto&) { return cetl::nullopt; });
         // transport_->setTransientErrorHandler(platform::CommonHelpers::Can::transientErrorReporter);
 

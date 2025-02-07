@@ -53,7 +53,7 @@ public:
 
         state_.file_size        = 0;
         state_.file_progress    = 0;
-        state_.file_path        = file_path;
+        state_.file_path        = {file_path.data(), file_path.size()};
         state_.start_time       = time_provider_.now();
         state_.file_error.value = uavcan::file::Error_1_0::OK;
 
