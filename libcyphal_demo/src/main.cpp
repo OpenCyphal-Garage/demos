@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: MIT
 // Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
+#include "any_transport_bag.hpp"
 #include "application.hpp"
 #include "exec_cmd_provider.hpp"
 #include "file_downloader.hpp"
-#include "transport_bag_can.hpp"
 #include "transport_bag_udp.hpp"
 
 #include <cetl/pf17/cetlpf.hpp>
@@ -32,6 +32,15 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <utility>
+
+#ifdef __linux__
+#include "transport_bag_can.hpp"
+#endif
+
+#if defined (__APPLE__)
+#include <crt_externs.h>
+#define environ (*_NSGetEnviron ())
+#endif
 
 using namespace std::chrono_literals;
 
@@ -187,34 +196,41 @@ libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
     auto node_params  = application.getNodeParams();
     auto iface_params = application.getIfaceParams();
 
-    // 1. Create the transport layer object. First try CAN, then UDP.
+    // 1. Create the transport layer object (try first UDP, then CAN).
     //
-    TransportBagCan transport_bag_can{general_mr, executor, media_block_mr};
-    TransportBagUdp transport_bag_udp{general_mr, executor, media_block_mr};
-    //
-    libcyphal::transport::ITransport* transport_iface = transport_bag_can.create(iface_params);
-    if (transport_iface == nullptr)
+    AnyTransportBag::Ptr any_transport_bag;
+    if (auto maybe_udp_transport_bag = TransportBagUdp::make(general_mr, executor, media_block_mr, iface_params))
     {
-        transport_iface = transport_bag_udp.create(iface_params);
+        any_transport_bag = std::move(maybe_udp_transport_bag);
     }
-    if (transport_iface == nullptr)
+    else
     {
-        std::cerr << "❌ Failed to create any transport.\n";
-        return ExitCode::TransportCreationFailure;
+#ifdef __linux__
+        if (auto maybe_can_transport_bag = TransportBagCan::make(general_mr, executor, media_block_mr, iface_params))
+        {
+            any_transport_bag = std::move(maybe_can_transport_bag);
+        }
+        else
+#endif  // __linux__
+        {
+            std::cerr << "❌ Failed to create any transport.\n";
+            return ExitCode::TransportCreationFailure;
+        }
     }
+    auto& transport = any_transport_bag->getTransport();
     TransferIdMap transfer_id_map{general_mr};
 
     // 2. Create the presentation layer object.
     //
     const auto unique_id = application.getUniqueId();
-    (void) transport_iface->setLocalNodeId(node_params.id.value()[0]);
-    std::cout << "Node ID   : " << transport_iface->getLocalNodeId().value_or(65535) << "\n";
+    (void) transport.setLocalNodeId(node_params.id.value()[0]);
+    std::cout << "Node ID   : " << transport.getLocalNodeId().value_or(65535) << "\n";
     std::cout << "Node Name : '" << node_params.description.value().c_str() << "'\n";
     std::cout << "Unique-ID : ";
     PrintUniqueIdTo(unique_id, std::cout);
     std::cout << "\n";
     //
-    libcyphal::presentation::Presentation presentation{general_mr, executor, *transport_iface};
+    libcyphal::presentation::Presentation presentation{general_mr, executor, transport};
     presentation.setTransferIdMap(&transfer_id_map);
 
     // 3. Create the node object with name.
@@ -314,7 +330,7 @@ int main(const int argc, char* const argv[])
     // Should we restart?
     if (cetl::get<bool>(result))
     {
-        (void) ::execve(argv[0], argv, ::environ);  // NOLINT
+        (void) ::execve(argv[0], argv, environ);  // NOLINT
         return static_cast<int>(ExitCode::RestartFailure);
     }
 

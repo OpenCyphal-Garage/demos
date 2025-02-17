@@ -1,0 +1,134 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "config-common",
+      "hidden": true,
+      "description": "Common configuration",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build",
+      "warnings": {
+        "deprecated": true,
+        "uninitialized": true
+      },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CONFIGURATION_TYPES": "Release;Debug",
+        "CMAKE_CROSS_CONFIGS": "all",
+        "CMAKE_DEFAULT_BUILD_TYPE": "Release",
+        "CMAKE_DEFAULT_CONFIGS": "Release",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../submodules/nunavut",
+        "CMAKE_CXX_FLAGS": "-DCETL_ENABLE_DEBUG_ASSERT=1"
+      }
+    },
+    {
+      "name": "config-linux",
+      "hidden": true,
+      "cacheVariables": {
+        "PLATFORM_OS_TYPE": "linux"
+      }
+    },
+    {
+      "name": "config-bsd",
+      "hidden": true,
+      "cacheVariables": {
+        "PLATFORM_OS_TYPE": "bsd"
+      }
+    },
+    {
+      "name": "OCVSMD-Linux",
+      "displayName": "Linux OCVSMD",
+      "description": "Configures OCVSMD for Linux.",
+      "inherits": [
+        "config-common",
+        "config-linux"
+      ]
+    },
+    {
+      "name": "OCVSMD-Linux-Coverage",
+      "displayName": "Linux OCVSMD (Coverage)",
+      "description": "Configures OCVSMD for Linux with coverage.",
+      "inherits": [
+        "config-common",
+        "config-linux"
+      ],
+      "binaryDir": "${sourceDir}/cmake-build-coverage",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "--coverage",
+        "CMAKE_CXX_FLAGS": "--coverage",
+        "NO_STATIC_ANALYSIS": "ON"
+      }
+    },
+    {
+      "name": "OCVSMD-BSD",
+      "displayName": "BSD OCVSMD",
+      "description": "Configures OCVSMD for BSD",
+      "inherits": [
+        "config-common",
+        "config-bsd"
+      ],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "OCVSMD-Linux-Debug",
+      "displayName": "Linux OCVSMD (Debug)",
+      "description": "Builds OCVSMD for Linux",
+      "configurePreset": "OCVSMD-Linux",
+      "configuration": "Debug"
+    },
+    {
+      "name": "OCVSMD-Linux-Debug-Coverage",
+      "displayName": "Linux OCVSMD (Debug, Coverage)",
+      "description": "Builds OCVSMD for Linux with coverage",
+      "configurePreset": "OCVSMD-Linux-Coverage",
+      "configuration": "Debug"
+    },
+    {
+      "name": "OCVSMD-Linux-Release",
+      "displayName": "Linux OCVSMD (Release)",
+      "description": "Builds OCVSMD for Linux",
+      "configurePreset": "OCVSMD-Linux",
+      "configuration": "Release"
+    },
+    {
+      "name": "OCVSMD-BSD-Debug",
+      "displayName": "BSD OCVSMD (Debug)",
+      "description": "Builds OCVSMD for BSD",
+      "configurePreset": "OCVSMD-BSD",
+      "configuration": "Debug"
+    },
+    {
+      "name": "OCVSMD-BSD-Release",
+      "displayName": "BSD OCVSMD (Release)",
+      "description": "Builds OCVSMD for BSD",
+      "configurePreset": "OCVSMD-BSD",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "OCVSMD-Debug",
+      "displayName": "Test OCVSMD (Debug)",
+      "description": "Tests OCVSMD",
+      "configurePreset": "OCVSMD-Linux",
+      "configuration": "Debug"
+    },
+    {
+      "name": "OCVSMD-Release",
+      "displayName": "Test OCVSMD (Release)",
+      "description": "Tests OCVSMD",
+      "configurePreset": "OCVSMD-Linux",
+      "configuration": "Release"
+    }
+  ]
+}

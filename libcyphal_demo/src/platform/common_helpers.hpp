@@ -10,9 +10,12 @@
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/visit_helpers.hpp>
 #include <libcyphal/errors.hpp>
-#include <libcyphal/transport/can/can_transport.hpp>
 #include <libcyphal/transport/errors.hpp>
 #include <libcyphal/transport/udp/udp_transport.hpp>
+
+#ifdef __linux__
+#include <libcyphal/transport/can/can_transport.hpp>
+#endif
 
 #include <iostream>
 
@@ -53,6 +56,8 @@ struct CommonHelpers
             return cetl::visit([](const auto& error) { return describeError(error); }, failure);
         }
     };
+
+#ifdef __linux__
 
     struct Can
     {
@@ -100,6 +105,8 @@ struct CommonHelpers
         }
 
     };  // Can
+
+#endif  // __linux__
 
     struct Udp
     {
