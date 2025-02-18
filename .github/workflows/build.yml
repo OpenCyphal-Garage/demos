@@ -25,7 +25,7 @@ jobs:
           submodules: recursive
 
       - name: Install Ninja
-        run: apt-get install ninja-build
+        run: sudo apt-get install ninja-build
 
       - name: Configure CMake
         run: cd ${{github.workspace}}/libcyphal_demo && cmake --preset Demo-Linux
