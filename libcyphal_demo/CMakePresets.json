@@ -41,18 +41,18 @@
       }
     },
     {
-      "name": "OCVSMD-Linux",
-      "displayName": "Linux OCVSMD",
-      "description": "Configures OCVSMD for Linux.",
+      "name": "Demo-Linux",
+      "displayName": "Linux Demo",
+      "description": "Configures Demo for Linux.",
       "inherits": [
         "config-common",
         "config-linux"
       ]
     },
     {
-      "name": "OCVSMD-Linux-Coverage",
-      "displayName": "Linux OCVSMD (Coverage)",
-      "description": "Configures OCVSMD for Linux with coverage.",
+      "name": "Demo-Linux-Coverage",
+      "displayName": "Linux Demo (Coverage)",
+      "description": "Configures Demo for Linux with coverage.",
       "inherits": [
         "config-common",
         "config-linux"
@@ -65,9 +65,9 @@
       }
     },
     {
-      "name": "OCVSMD-BSD",
-      "displayName": "BSD OCVSMD",
-      "description": "Configures OCVSMD for BSD",
+      "name": "Demo-BSD",
+      "displayName": "BSD Demo",
+      "description": "Configures Demo for BSD",
       "inherits": [
         "config-common",
         "config-bsd"
@@ -80,54 +80,54 @@
   ],
   "buildPresets": [
     {
-      "name": "OCVSMD-Linux-Debug",
-      "displayName": "Linux OCVSMD (Debug)",
-      "description": "Builds OCVSMD for Linux",
-      "configurePreset": "OCVSMD-Linux",
+      "name": "Demo-Linux-Debug",
+      "displayName": "Linux Demo (Debug)",
+      "description": "Builds Demo for Linux",
+      "configurePreset": "Demo-Linux",
       "configuration": "Debug"
     },
     {
-      "name": "OCVSMD-Linux-Debug-Coverage",
-      "displayName": "Linux OCVSMD (Debug, Coverage)",
-      "description": "Builds OCVSMD for Linux with coverage",
-      "configurePreset": "OCVSMD-Linux-Coverage",
+      "name": "Demo-Linux-Debug-Coverage",
+      "displayName": "Linux Demo (Debug, Coverage)",
+      "description": "Builds Demo for Linux with coverage",
+      "configurePreset": "Demo-Linux-Coverage",
       "configuration": "Debug"
     },
     {
-      "name": "OCVSMD-Linux-Release",
-      "displayName": "Linux OCVSMD (Release)",
-      "description": "Builds OCVSMD for Linux",
-      "configurePreset": "OCVSMD-Linux",
+      "name": "Demo-Linux-Release",
+      "displayName": "Linux Demo (Release)",
+      "description": "Builds Demo for Linux",
+      "configurePreset": "Demo-Linux",
       "configuration": "Release"
     },
     {
-      "name": "OCVSMD-BSD-Debug",
-      "displayName": "BSD OCVSMD (Debug)",
-      "description": "Builds OCVSMD for BSD",
-      "configurePreset": "OCVSMD-BSD",
+      "name": "Demo-BSD-Debug",
+      "displayName": "BSD Demo (Debug)",
+      "description": "Builds Demo for BSD",
+      "configurePreset": "Demo-BSD",
       "configuration": "Debug"
     },
     {
-      "name": "OCVSMD-BSD-Release",
-      "displayName": "BSD OCVSMD (Release)",
-      "description": "Builds OCVSMD for BSD",
-      "configurePreset": "OCVSMD-BSD",
+      "name": "Demo-BSD-Release",
+      "displayName": "BSD Demo (Release)",
+      "description": "Builds Demo for BSD",
+      "configurePreset": "Demo-BSD",
       "configuration": "Release"
     }
   ],
   "testPresets": [
     {
-      "name": "OCVSMD-Debug",
-      "displayName": "Test OCVSMD (Debug)",
-      "description": "Tests OCVSMD",
-      "configurePreset": "OCVSMD-Linux",
+      "name": "Demo-Debug",
+      "displayName": "Test Demo (Debug)",
+      "description": "Tests Demo",
+      "configurePreset": "Demo-Linux",
       "configuration": "Debug"
     },
     {
-      "name": "OCVSMD-Release",
-      "displayName": "Test OCVSMD (Release)",
-      "description": "Tests OCVSMD",
-      "configurePreset": "OCVSMD-Linux",
+      "name": "Demo-Release",
+      "displayName": "Test Demo (Release)",
+      "description": "Tests Demo",
+      "configurePreset": "Demo-Linux",
       "configuration": "Release"
     }
   ]
