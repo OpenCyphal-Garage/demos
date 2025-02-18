@@ -18,24 +18,20 @@ jobs:
   build_libcyphal_demo:
     name: Build LibCyphal demo
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build_type: [Release, Debug]
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: get nunavut
-        run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
-
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/libcyphal_demo/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} ${{github.workspace}}/libcyphal_demo
+        run: cd ${{github.workspace}}/libcyphal_demo && cmake --preset Demo-Linux
 
-      - name: Build
-        run: cmake --build ${{github.workspace}}/libcyphal_demo/build --config ${{matrix.build_type}}
+      - name: Build Debug
+        run: cd ${{github.workspace}}/libcyphal_demo && cmake --build --preset Demo-Linux-Debug
+
+      - name: Build Release
+        run: cd ${{github.workspace}}/libcyphal_demo && cmake --build --preset Demo-Linux-Release
 
   build_libudpard_demo:
     name: Build LibUDPard demo
@@ -45,10 +41,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: get nunavut
-        run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/libudpard_demo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/libudpard_demo
@@ -65,10 +57,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: get nunavut
-        run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
-
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/differential_pressure_sensor/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/differential_pressure_sensor
 
@@ -84,10 +72,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: get nunavut
-        run: >
-          pip install git+https://github.com/OpenCyphal/nunavut.git@3.0.preview
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/udral_servo/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{github.workspace}}/udral_servo
