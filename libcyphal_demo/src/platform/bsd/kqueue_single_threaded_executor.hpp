@@ -107,6 +107,12 @@ public:
         if (kqueue_result < 0)
         {
             const auto err = errno;
+            if (err == EINTR)
+            {
+                // Normally, we would just retry a system call (`::kevent`),
+                // but we need updated timeout (from the main loop).
+                return cetl::nullopt;
+            }
             return libcyphal::transport::PlatformError{posix::PosixPlatformError{err}};
         }
         if (kqueue_result == 0)

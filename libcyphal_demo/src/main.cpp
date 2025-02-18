@@ -302,7 +302,11 @@ libcyphal::Expected<bool, ExitCode> run_application(const char* const root_path)
         {
             timeout = std::min(timeout, spin_result.next_exec_time.value() - executor.now());
         }
-        (void) executor.pollAwaitableResourcesFor(cetl::make_optional(timeout));
+        if (const auto failure = executor.pollAwaitableResourcesFor(cetl::make_optional(timeout)))
+        {
+            (void) failure;
+            std::cerr << "❌ Poll failure.\n";
+        }
     }
     //
     std::cout << "🏁 Done.\n-----------\nRun Stats:\n";
