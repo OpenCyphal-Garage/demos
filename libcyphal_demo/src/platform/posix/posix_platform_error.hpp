@@ -33,6 +33,10 @@ public:
 
     // MARK: IPlatformError
 
+    /// Gets platform-specific error code.
+    ///
+    /// In this case, the error code is the POSIX error code (aka `errno`).
+    ///
     std::uint32_t code() const noexcept override
     {
         return static_cast<std::uint32_t>(code_);

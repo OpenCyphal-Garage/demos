@@ -80,8 +80,9 @@ public:
         }
     }
 
-    CanMedia(const CanMedia&)            = delete;
-    CanMedia& operator=(const CanMedia&) = delete;
+    CanMedia(const CanMedia&)                = delete;
+    CanMedia& operator=(const CanMedia&)     = delete;
+    CanMedia* operator=(CanMedia&&) noexcept = delete;
 
     CanMedia(CanMedia&& other) noexcept
         : general_mr_{other.general_mr_}
@@ -92,7 +93,6 @@ public:
         , tx_mr_{other.tx_mr_}
     {
     }
-    CanMedia* operator=(CanMedia&&) noexcept = delete;
 
     void tryReopen()
     {

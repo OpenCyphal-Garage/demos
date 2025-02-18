@@ -11,5 +11,4 @@ add_library(
         shared_register
         ${CMAKE_CURRENT_LIST_DIR}/register.c
 )
-add_dependencies(shared_register dsdl_uavcan)
 target_include_directories(shared_register PUBLIC ${CMAKE_CURRENT_LIST_DIR})
