@@ -18,4 +18,4 @@
 [submodule "submodules/nunavut"]
 	path = submodules/nunavut
 	url = https://github.com/OpenCyphal/nunavut.git
-	branch = sshirokov/rpi32
+	branch = 3.0.preview
