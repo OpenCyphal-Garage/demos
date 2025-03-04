@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: MIT
 # Author: Sergei Shirokov <sergei.shirokov@zubax.com>
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
 project(libcyphal_demo
         LANGUAGES CXX C
@@ -15,6 +15,7 @@ set(DISABLE_CPP_EXCEPTIONS ON CACHE STRING "Disable C++ exceptions.")
 
 option(CETL_ENABLE_DEBUG_ASSERT "Enable or disable runtime CETL asserts." ON)
 
+set(CXX_FLAG_SET "")
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (DISABLE_CPP_EXCEPTIONS)
         message(STATUS "DISABLE_CPP_EXCEPTIONS is true. Adding -fno-exceptions to compiler flags.")
@@ -25,15 +26,16 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # Disable PSABI warnings in GCC (on RPi).
     list(APPEND CXX_FLAG_SET "-Wno-psabi")
 endif()
-
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:${CXX_FLAG_SET}>")
 
 if (CETL_ENABLE_DEBUG_ASSERT)
     add_compile_definitions("CETL_ENABLE_DEBUG_ASSERT=1")
 endif()
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
-set(submodules "${CMAKE_SOURCE_DIR}/../submodules")
+# Set the output binary directory
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+set(submodules_dir "${CMAKE_SOURCE_DIR}/../submodules")
 
 # Set up static analysis.
 set(STATIC_ANALYSIS ON CACHE BOOL "enable static analysis")
@@ -41,9 +43,19 @@ if (STATIC_ANALYSIS)
     # clang-tidy (separate config files per directory)
     find_program(clang_tidy NAMES clang-tidy)
     if (NOT clang_tidy)
-        message(FATAL_ERROR "Could not locate clang-tidy")
+        message(WARNING "Could not locate clang-tidy")
     endif ()
     message(STATUS "Using clang-tidy: ${clang_tidy}")
+endif ()
+
+# Pull in Nunavut's cmake integration
+find_package("Nunavut" 3.0 REQUIRED)
+
+# libcyphal requires PMR support for Nunavut generated code.
+if (${CMAKE_CXX_STANDARD} STREQUAL "14")
+    set(CYPHAL_LANGUAGE_STANDARD "cetl++14-17")
+else ()
+    set(CYPHAL_LANGUAGE_STANDARD "c++${CMAKE_CXX_STANDARD}-pmr")
 endif ()
 
 # Forward the revision information to the compiler so that we could expose it at runtime. This is entirely optional.
@@ -60,53 +72,30 @@ add_definitions(
         -DVCS_REVISION_ID=0x${vcs_revision_id}ULL
         -DNODE_NAME="org.opencyphal.demos.libcyphal"
 )
+if (DEFINED PLATFORM_OS_TYPE)
+    if (${PLATFORM_OS_TYPE} STREQUAL "bsd")
+        add_definitions(-DPLATFORM_OS_TYPE_BSD)
+    elseif (${PLATFORM_OS_TYPE} STREQUAL "linux")
+        add_definitions(-DPLATFORM_OS_TYPE_LINUX)
+    endif ()
+endif ()
 
-# Transpile DSDL into C++ using Nunavut. Install Nunavut as follows: pip install nunavut.
-# Alternatively, you can invoke the transpiler manually or use https://nunaweb.opencyphal.org.
-find_package(nnvg REQUIRED)
-create_dsdl_target(             # Generate the support library for generated C++ headers, which is "nunavut.h".
-        "nunavut_support"
-        cpp
-        ${CMAKE_BINARY_DIR}/transpiled
-        ""
-        OFF
-        little
-        "only"
-)
-set(dsdl_root_namespace_dirs                # List all DSDL root namespaces to transpile here.
-        ${submodules}/public_regulated_data_types/uavcan
-)
-foreach (ns_dir ${dsdl_root_namespace_dirs})
-    get_filename_component(ns ${ns_dir} NAME)
-    message(STATUS "DSDL namespace ${ns} at ${ns_dir}")
-    create_dsdl_target(
-            "dsdl_${ns}"                    # CMake target name
-            cpp                             # Target language to transpile into
-            ${CMAKE_BINARY_DIR}/transpiled  # Destination directory (add it to the includes)
-            ${ns_dir}                       # Source directory
-            OFF                             # Disable variable array capacity override
-            little                          # Endianness of the target platform (alternatives: "big", "any")
-            "never"                         # Support files are generated once in the nunavut_support target (above)
-            ${dsdl_root_namespace_dirs}     # Look-up DSDL namespaces
-    )
-    add_dependencies("dsdl_${ns}" nunavut_support)
-endforeach ()
-include_directories(SYSTEM ${CMAKE_BINARY_DIR}/transpiled)  # Make the transpiled headers available for inclusion.
 add_definitions(-DNUNAVUT_ASSERT=assert)
 
 # Define the LibUDPard static library build target.
-add_library(udpard STATIC ${submodules}/libudpard/libudpard/udpard.c)
-target_include_directories(udpard INTERFACE SYSTEM ${submodules}/libudpard/libudpard)
+add_library(udpard STATIC ${submodules_dir}/libudpard/libudpard/udpard.c)
+target_include_directories(udpard INTERFACE SYSTEM ${submodules_dir}/libudpard/libudpard)
+include(${CMAKE_SOURCE_DIR}/../shared/udp/udp.cmake)
 
-# Define the LibCANard static library build target.
-add_library(canard STATIC ${submodules}/libcanard/libcanard/canard.c)
-target_include_directories(canard INTERFACE SYSTEM ${submodules}/libcanard/libcanard)
+if (${PLATFORM_OS_TYPE} STREQUAL "linux")
+    # Define the LibCANard static library build target.
+    add_library(canard STATIC ${submodules_dir}/libcanard/libcanard/canard.c)
+    target_include_directories(canard INTERFACE SYSTEM ${submodules_dir}/libcanard/libcanard)
+    include(${CMAKE_SOURCE_DIR}/../shared/socketcan/socketcan.cmake)
+endif ()
 
 # Build o1heap -- a hard real-time deterministic memory allocator for embedded systems.
-add_library(o1heap STATIC ${submodules}/o1heap/o1heap/o1heap.c)
-target_include_directories(o1heap INTERFACE SYSTEM ${submodules}/o1heap/o1heap)
-
-include(${CMAKE_SOURCE_DIR}/../shared/socketcan/socketcan.cmake)
-include(${CMAKE_SOURCE_DIR}/../shared/udp/udp.cmake)
+add_library(o1heap STATIC ${submodules_dir}/o1heap/o1heap/o1heap.c)
+target_include_directories(o1heap INTERFACE SYSTEM ${submodules_dir}/o1heap/o1heap)
 
 add_subdirectory(src)

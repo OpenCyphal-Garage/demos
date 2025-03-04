@@ -8,7 +8,7 @@
 #define APPLICATION_HPP
 
 #include "platform/block_memory_resource.hpp"
-#include "platform/linux/epoll_single_threaded_executor.hpp"
+#include "platform/defines.hpp"
 #include "platform/o1_heap_memory_resource.hpp"
 #include "platform/storage.hpp"
 #include "platform/string.hpp"
@@ -206,7 +206,7 @@ public:
     Application(Application&&)                 = delete;
     Application& operator=(Application&&)      = delete;
 
-    CETL_NODISCARD platform::Linux::EpollSingleThreadedExecutor& executor() noexcept
+    CETL_NODISCARD platform::SingleThreadedExecutor& executor() noexcept
     {
         return executor_;
     }
@@ -244,13 +244,13 @@ public:
 private:
     // MARK: Data members:
 
-    platform::Linux::EpollSingleThreadedExecutor executor_;
-    platform::O1HeapMemoryResource               o1_heap_mr_;
-    platform::O1HeapMemoryResource               o1_block_heap_mr_;
-    platform::BlockMemoryResource                media_block_mr_;
-    platform::storage::KeyValue                  storage_;
-    libcyphal::application::registry::Registry   registry_;
-    Regs                                         regs_;
+    platform::SingleThreadedExecutor           executor_;
+    platform::O1HeapMemoryResource             o1_heap_mr_;
+    platform::O1HeapMemoryResource             o1_block_heap_mr_;
+    platform::BlockMemoryResource              media_block_mr_;
+    platform::storage::KeyValue                storage_;
+    libcyphal::application::registry::Registry registry_;
+    Regs                                       regs_;
 
 };  // Application
 
