@@ -10,6 +10,8 @@
 #include "platform/string.hpp"
 #include "udp_sockets.hpp"
 
+#include <udpard.h>
+
 #include <cetl/pf17/cetlpf.hpp>
 #include <cetl/pf20/cetlpf.hpp>
 #include <libcyphal/executor.hpp>
@@ -35,6 +37,7 @@ public:
         : general_mr_{general_mr}
         , executor_{executor}
         , iface_address_{iface_address}
+        , iface_mtu_{UDPARD_MTU_DEFAULT}
         , tx_mr_{tx_mr}
     {
     }
@@ -49,6 +52,7 @@ public:
         : general_mr_{other.general_mr_}
         , executor_{other.executor_}
         , iface_address_{other.iface_address_}
+        , iface_mtu_{other.iface_mtu_}
         , tx_mr_{other.tx_mr_}
     {
     }
@@ -58,12 +62,17 @@ public:
         iface_address_ = iface_address;
     }
 
+    void setMtu(const std::size_t mtu)
+    {
+        iface_mtu_ = mtu;
+    }
+
 private:
     // MARK: - IMedia
 
     MakeTxSocketResult::Type makeTxSocket() override
     {
-        return UdpTxSocket::make(general_mr_, executor_, iface_address_.data());
+        return UdpTxSocket::make(general_mr_, executor_, iface_address_.data(), iface_mtu_);
     }
 
     MakeRxSocketResult::Type makeRxSocket(const libcyphal::transport::udp::IpEndpoint& multicast_endpoint) override
@@ -81,6 +90,7 @@ private:
     cetl::pmr::memory_resource& general_mr_;
     libcyphal::IExecutor&       executor_;
     String<64>                  iface_address_;
+    std::size_t                 iface_mtu_;
     cetl::pmr::memory_resource& tx_mr_;
 
 };  // UdpMedia
@@ -99,7 +109,7 @@ struct UdpMediaCollection
     {
     }
 
-    void parse(const cetl::string_view iface_addresses)
+    void parse(const cetl::string_view iface_addresses, const std::size_t iface_mtu)
     {
         // Split addresses by spaces.
         //
@@ -111,7 +121,10 @@ struct UdpMediaCollection
             const auto iface_address = iface_addresses.substr(curr, next - curr);
             if (!iface_address.empty())
             {
-                media_array_[index].setAddress(iface_address);  // NOLINT
+                auto& media = media_array_[index];  // NOLINT
+
+                media.setAddress(iface_address);
+                media.setMtu(iface_mtu);
                 index++;
             }
 

@@ -721,7 +721,7 @@ int main(const int argc, char* const argv[])
     // We also need the bitrate configuration register. In this demo we can't really use it but an embedded application
     // should define "uavcan.can.bitrate" of type natural32[2]; the second value is 0/ignored if CAN FD not supported.
     const int sock[CAN_REDUNDANCY_FACTOR] = {
-        socketcanOpen("vcan0", val.natural16.value.elements[0] > CANARD_MTU_CAN_CLASSIC)  //
+        socketcanOpen("vcan0", val.natural16.value.elements[0])  //
     };
     for (uint8_t ifidx = 0; ifidx < CAN_REDUNDANCY_FACTOR; ifidx++)
     {

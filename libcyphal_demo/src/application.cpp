@@ -50,9 +50,17 @@ Application::Application(const char* const root_path)
     {
         iface_params.udp_iface.value() = iface_addresses_str;
     }
+    if (const auto* const iface_mtu_str = std::getenv("CYPHAL__UDP__MTU"))
+    {
+        iface_params.udp_mtu.value()[0] = static_cast<std::uint16_t>(std::stoul(iface_mtu_str));
+    }
     if (const auto* const iface_addresses_str = std::getenv("CYPHAL__CAN__IFACE"))
     {
         iface_params.can_iface.value() = iface_addresses_str;
+    }
+    if (const auto* const iface_mtu_str = std::getenv("CYPHAL__CAN__MTU"))
+    {
+        iface_params.can_mtu.value()[0] = static_cast<std::uint16_t>(std::stoul(iface_mtu_str));
     }
     auto node_params = getNodeParams();
     if (const auto* const node_id_str = std::getenv("CYPHAL__NODE__ID"))

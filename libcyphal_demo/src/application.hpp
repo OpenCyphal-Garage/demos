@@ -176,9 +176,11 @@ public:
 
         // clang-format off
         StringParam<MaxIfaceLen>    can_iface_   {  "uavcan.can.iface",         registry_,  {"vcan0"},      {true}};
+        Natural16Param<1>           can_mtu_     {  "uavcan.can.mtu",           registry_,  {8},            {true}};
         StringParam<MaxNodeDesc>    node_desc_   {  "uavcan.node.description",  registry_,  {NODE_NAME},    {true}};
         Natural16Param<1>           node_id_     {  "uavcan.node.id",           registry_,  {65535U},       {true}};
         StringParam<MaxIfaceLen>    udp_iface_   {  "uavcan.udp.iface",         registry_,  {"127.0.0.1"},  {true}};
+        Natural16Param<1>           udp_mtu_     {  "uavcan.udp.mtu",           registry_,  {1408},         {true}};
         Natural16Param<2>           demo_u16s_   {  "demo.u16s",                registry_,  {0U, 0U},       {false}};
         Register<RegisterFootprint> sys_info_mem_block_;
         Register<RegisterFootprint> sys_info_mem_general_;
@@ -189,7 +191,9 @@ public:
     struct IfaceParams
     {
         Regs::StringParam<MaxIfaceLen>& udp_iface;
+        Regs::Natural16Param<1>&        udp_mtu;
         Regs::StringParam<MaxIfaceLen>& can_iface;
+        Regs::Natural16Param<1>&        can_mtu;
     };
 
     struct NodeParams
@@ -228,7 +232,7 @@ public:
 
     CETL_NODISCARD IfaceParams getIfaceParams() noexcept
     {
-        return {regs_.udp_iface_, regs_.can_iface_};
+        return {regs_.udp_iface_, regs_.udp_mtu_, regs_.can_iface_, regs_.can_mtu_};
     }
 
     CETL_NODISCARD NodeParams getNodeParams() noexcept

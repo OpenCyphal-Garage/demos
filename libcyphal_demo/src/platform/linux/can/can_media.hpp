@@ -44,11 +44,12 @@ public:
         cetl::pmr::memory_resource& general_mr,
         libcyphal::IExecutor&       executor,
         const cetl::string_view     iface_address_sv,
+        const std::size_t           iface_mtu,
         cetl::pmr::memory_resource& tx_mr)
     {
         const IfaceAddrString iface_address{iface_address_sv};
 
-        const SocketCANFD socket_can_rx_fd = ::socketcanOpen(iface_address.c_str(), false);
+        const SocketCANFD socket_can_rx_fd = ::socketcanOpen(iface_address.c_str(), iface_mtu);
         if (socket_can_rx_fd < 0)
         {
             return libcyphal::transport::PlatformError{posix::PosixPlatformError{-socket_can_rx_fd}};
@@ -57,7 +58,7 @@ public:
         // We gonna register separate callbacks for rx & tx (aka pop & push),
         // so at executor (especially in case of the "epoll" one) we need separate file descriptors.
         //
-        const SocketCANFD socket_can_tx_fd = ::socketcanOpen(iface_address.c_str(), false);
+        const SocketCANFD socket_can_tx_fd = ::socketcanOpen(iface_address.c_str(), iface_mtu);
         if (socket_can_tx_fd < 0)
         {
             const int error_code = -socket_can_tx_fd;
@@ -65,7 +66,7 @@ public:
             return libcyphal::transport::PlatformError{posix::PosixPlatformError{error_code}};
         }
 
-        return CanMedia{general_mr, executor, socket_can_rx_fd, socket_can_tx_fd, iface_address, tx_mr};
+        return CanMedia{general_mr, executor, socket_can_rx_fd, socket_can_tx_fd, iface_address, iface_mtu, tx_mr};
     }
 
     ~CanMedia()
@@ -90,6 +91,7 @@ public:
         , socket_can_rx_fd_{std::exchange(other.socket_can_rx_fd_, -1)}
         , socket_can_tx_fd_{std::exchange(other.socket_can_tx_fd_, -1)}
         , iface_address_{other.iface_address_}
+        , iface_mtu_{other.iface_mtu_}
         , tx_mr_{other.tx_mr_}
     {
     }
@@ -107,13 +109,13 @@ public:
             socket_can_tx_fd_ = -1;
         }
 
-        const SocketCANFD socket_can_rx_fd = ::socketcanOpen(iface_address_.c_str(), false);
+        const SocketCANFD socket_can_rx_fd = ::socketcanOpen(iface_address_.c_str(), iface_mtu_);
         if (socket_can_rx_fd >= 0)
         {
             socket_can_rx_fd_ = socket_can_rx_fd;
         }
 
-        const SocketCANFD socket_can_tx_fd = ::socketcanOpen(iface_address_.c_str(), false);
+        const SocketCANFD socket_can_tx_fd = ::socketcanOpen(iface_address_.c_str(), iface_mtu_);
         if (socket_can_tx_fd >= 0)
         {
             socket_can_tx_fd_ = socket_can_tx_fd;
@@ -135,12 +137,14 @@ private:
              const SocketCANFD           socket_can_rx_fd,
              const SocketCANFD           socket_can_tx_fd,
              const IfaceAddrString&      iface_address,
+             const std::size_t           iface_mtu,
              cetl::pmr::memory_resource& tx_mr)
         : general_mr_{general_mr}
         , executor_{executor}
         , socket_can_rx_fd_{socket_can_rx_fd}
         , socket_can_tx_fd_{socket_can_tx_fd}
         , iface_address_{iface_address}
+        , iface_mtu_{iface_mtu}
         , tx_mr_{tx_mr}
     {
     }
@@ -162,7 +166,7 @@ private:
 
     std::size_t getMtu() const noexcept override
     {
-        return CANARD_MTU_CAN_CLASSIC;
+        return iface_mtu_;
     }
 
     cetl::optional<libcyphal::transport::MediaFailure> setFilters(const Filters filters) noexcept override
@@ -255,6 +259,7 @@ private:
     SocketCANFD                 socket_can_rx_fd_;
     SocketCANFD                 socket_can_tx_fd_;
     IfaceAddrString             iface_address_;
+    std::size_t                 iface_mtu_;
     cetl::pmr::memory_resource& tx_mr_;
 
 };  // CanMedia
@@ -273,7 +278,7 @@ struct CanMediaCollection
     {
     }
 
-    void parse(const cetl::string_view iface_addresses)
+    void parse(const cetl::string_view iface_addresses, const std::size_t iface_mtu)
     {
         // Reset the collection.
         for (std::size_t i = 0; i < MaxCanMedia; i++)
@@ -292,7 +297,7 @@ struct CanMediaCollection
             const auto iface_address = iface_addresses.substr(curr, next - curr);
             if (!iface_address.empty())
             {
-                auto maybe_media = CanMedia::make(general_mr_, executor_, iface_address, tx_mr_);
+                auto maybe_media = CanMedia::make(general_mr_, executor_, iface_address, iface_mtu, tx_mr_);
                 if (auto* const media_ptr = cetl::get_if<CanMedia>(&maybe_media))
                 {
                     media_array_[index].emplace(std::move(*media_ptr));     // NOLINT

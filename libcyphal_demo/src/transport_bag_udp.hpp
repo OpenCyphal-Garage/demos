@@ -67,7 +67,7 @@ public:
         }
         auto& bag = static_cast<TransportBagUdp&>(*any_transport_bag);  // NOLINT
 
-        bag.media_collection_.parse(params.udp_iface.value());
+        bag.media_collection_.parse(params.udp_iface.value(), params.udp_mtu.value()[0]);
         auto maybe_udp_transport = makeTransport({general_mr}, executor, bag.media_collection_.span(), TxQueueCapacity);
         if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_udp_transport))
         {
