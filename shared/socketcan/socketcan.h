@@ -45,8 +45,9 @@ typedef int SocketCANFD;
 /// Initialize a new non-blocking (sic!) SocketCAN socket and return its handle on success.
 /// On failure, a negated errno is returned.
 /// To discard the socket just call close() on it; no additional de-initialization activities are required.
-/// The argument can_fd enables support for CAN FD frames.
-SocketCANFD socketcanOpen(const char* const iface_name, const bool can_fd);
+/// The argument can_mtu specifies CAN MTU size: 8 - for classic; >8 (64 normally) - for CAN FD frames.
+/// In the future, this MTU size may be extended to support CAN XL.
+SocketCANFD socketcanOpen(const char* const iface_name, const size_t can_mtu);
 
 /// Enqueue a new extended CAN data frame for transmission.
 /// Block until the frame is enqueued or until the timeout is expired.

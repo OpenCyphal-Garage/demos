@@ -77,7 +77,7 @@ static int16_t doPoll(const SocketCANFD fd, const int16_t mask, const CanardMicr
     return 1;
 }
 
-SocketCANFD socketcanOpen(const char* const iface_name, const bool can_fd)
+SocketCANFD socketcanOpen(const char* const iface_name, const size_t can_mtu)
 {
     const size_t iface_name_size = strlen(iface_name) + 1;
     if (iface_name_size > IFNAMSIZ)
@@ -105,7 +105,7 @@ SocketCANFD socketcanOpen(const char* const iface_name, const bool can_fd)
     }
 
     // Enable CAN FD if required.
-    if (ok && can_fd)
+    if (ok && (can_mtu > CAN_MAX_DLEN))
     {
         const int en = 1;
         ok           = 0 == setsockopt(fd, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &en, sizeof(en));

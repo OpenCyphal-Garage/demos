@@ -39,7 +39,8 @@ public:
     CETL_NODISCARD static libcyphal::transport::udp::IMedia::MakeTxSocketResult::Type make(
         cetl::pmr::memory_resource& memory,
         libcyphal::IExecutor&       executor,
-        const char* const           iface_address)
+        const char* const           iface_address,
+        const std::size_t           iface_mtu)
     {
         UDPTxHandle handle{-1};
         const auto  result = ::udpTxInit(&handle, ::udpParseIfaceAddress(iface_address));
@@ -48,7 +49,7 @@ public:
             return libcyphal::transport::PlatformError{PosixPlatformError{-result}};
         }
 
-        auto tx_socket = libcyphal::makeUniquePtr<ITxSocket, UdpTxSocket>(memory, executor, handle);
+        auto tx_socket = libcyphal::makeUniquePtr<ITxSocket, UdpTxSocket>(memory, executor, handle, iface_mtu);
         if (tx_socket == nullptr)
         {
             ::udpTxClose(&handle);
@@ -58,9 +59,10 @@ public:
         return tx_socket;
     }
 
-    UdpTxSocket(libcyphal::IExecutor& executor, UDPTxHandle udp_handle)
+    UdpTxSocket(libcyphal::IExecutor& executor, UDPTxHandle udp_handle, const std::size_t iface_mtu)
         : udp_handle_{udp_handle}
         , executor_{executor}
+        , iface_mtu_{iface_mtu}
     {
         CETL_DEBUG_ASSERT(udp_handle_.fd >= 0, "");
     }
@@ -77,6 +79,11 @@ public:
 
 private:
     // MARK: ITxSocket
+
+    std::size_t getMtu() const noexcept override
+    {
+        return iface_mtu_;
+    }
 
     SendResult::Type send(const libcyphal::TimePoint,
                           const libcyphal::transport::udp::IpEndpoint  multicast_endpoint,
@@ -119,6 +126,7 @@ private:
 
     UDPTxHandle           udp_handle_;
     libcyphal::IExecutor& executor_;
+    std::size_t           iface_mtu_;
 
 };  // UdpTxSocket
 

@@ -67,7 +67,7 @@ public:
         }
         auto& bag = static_cast<TransportBagCan&>(*any_transport_bag);  // NOLINT
 
-        bag.media_collection_.parse(params.can_iface.value());
+        bag.media_collection_.parse(params.can_iface.value(), params.can_mtu.value()[0]);
         auto maybe_can_transport = makeTransport({general_mr}, executor, bag.media_collection_.span(), TxQueueCapacity);
         if (const auto* failure = cetl::get_if<libcyphal::transport::FactoryFailure>(&maybe_can_transport))
         {
